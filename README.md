@@ -119,12 +119,7 @@ Each trial follows:
 
 > Add actual files/links below.
 
-### Photos
-- `photos/proto_motor_wiring.jpg`  
-  *Caption:* Full wiring view: ESP32 + L9110S + TT motor + IR sensor wiring, showing shared ground and pin mapping.
 
-- `photos/proto_ir_mount.jpg`  
-  *Caption:* IR sensor placement relative to the entry/box opening.
 
 ### Videos
 - `videos/proto_motor_leave_then_clean.mp4`  
