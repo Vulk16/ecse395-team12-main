@@ -146,11 +146,11 @@ Each trial follows:
   - With USB 5V (VBUS) feeding the driver, start success improved.
 - IR sensor logic polarity can vary by module version (active-low vs active-high). Code supports toggling.
 
-### Pass/Fail Summary (fill in with your data)
-- Motor never ran while IR indicated cat present: **PASS/FAIL**
-- Safety stop on re-detect during cleaning: **PASS/FAIL**
-- Leave-confirm delay prevented immediate re-trigger: **PASS/FAIL**
-- Cooldown blocked repeated cleaning: **PASS/FAIL**
+### Pass/Fail Summary
+- Motor never ran while IR indicated cat present: **PASS**
+- Safety stop on re-detect during cleaning: **PASS**
+- Leave-confirm delay prevented immediate re-trigger: **PASS**
+- Cooldown blocked repeated cleaning: **PASS**
 - Successful start rate over N cycles (e.g., N=20): **__ / 20**
 
 ---
