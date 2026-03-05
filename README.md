@@ -123,7 +123,7 @@ Each trial follows:
 
 ![As-built Setup Photo](motor-l9110s-tt/hardware/setup.jpg)
 
-### Videos (actual submitted evidence files in this repo)
+### Videos
 - `motor-l9110s-tt/test/cat_activity_detection_cleaning.mp4`  
   *Caption:* Demonstrates cat-present lockout, then leave-confirm delay, then cleaning cycle.  
   *Link:* [cat_activity_detection_cleaning.mp4](motor-l9110s-tt/test/cat_activity_detection_cleaning.mp4)
@@ -134,16 +134,6 @@ Each trial follows:
 
 > Note: GitHub may show “Sorry about that, but we can’t show files that are this big right now.”  
 > Use the **“View raw”** button to open/download the `.mp4`.
-
-### Videos
-- `videos/proto_motor_leave_then_clean.mp4`  
-  *Caption:* Demonstrates cat-present lockout, then leave-confirm delay, then cleaning cycle.
-
-- `videos/proto_safety_stop.mp4`  
-  *Caption:* Demonstrates safety behavior: obstacle reappears during CLEANING → motor stops immediately.
-
-- `videos/proto_cooldown_block.mp4`  
-  *Caption:* Demonstrates cooldown preventing repeated cleaning.
 
 ---
 
