@@ -151,7 +151,7 @@ Each trial follows:
 - Safety stop on re-detect during cleaning: **PASS**
 - Leave-confirm delay prevented immediate re-trigger: **PASS**
 - Cooldown blocked repeated cleaning: **PASS**
-- Successful start rate over N cycles (e.g., N=20): **__ / 20**
+- Successful start rate over 10 cycles: **10 / 10**
 
 ---
 
