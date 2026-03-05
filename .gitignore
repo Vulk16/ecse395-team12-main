@@ -1,0 +1,15 @@
+.pio/
+.vscode/
+.DS_Store
+*.log
+build/
+dist/
+out/
+
+# macOS
+.DS_Store
+
+# R / RStudio
+.Rhistory
+.RData
+.Rproj.user/
