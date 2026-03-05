@@ -69,7 +69,7 @@ V&V alignment categories:
 - IR **GND → ESP32 GND**
 - IR **OUT → ESP32 A2**
   
-![Wiring Diagram: TT Motor + IR + ESP32](motor-l9110s-tt/hardware/wiring_diagram.jpg)
+![Wiring Diagram: TT Motor + IR + ESP32](motor-l9110s-tt/hardware/wiring_diagram_prototype1.jpg)
 
 *Figure 1. Wiring diagram of TT motor (L9110S) and IR obstacle sensor with ESP32 (Feather V2).*
 ---
