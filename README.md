@@ -114,7 +114,7 @@ Each trial follows:
 
 ## 7) Evidence (Photos/Videos + Captions)
 
-> Add your actual files/links below.
+> Add actual files/links below.
 
 ### Photos
 - `photos/proto_motor_wiring.jpg`  
