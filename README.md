@@ -187,6 +187,6 @@ Each trial follows:
 - `test/` : behavior evidence videos  
 - `README.md` : summary + links to this prototype section
 
-### Prototype 1 (this folder) structure (actual paths used above)
+### Prototype 1 structure
 - `motor-l9110s-tt/hardware/` : wiring diagram + setup photo  
 - `motor-l9110s-tt/test/` : behavior evidence videos (`.mp4`)
