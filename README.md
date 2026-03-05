@@ -175,9 +175,8 @@ Each trial follows:
 
 ## 11) Next Steps (Prototype 2 / Prototype 3 suggestions)
 
-- **Prototype 2:** quantify response time and false-trigger rate under multiple sensor placements and different “cat motion” patterns; add a simple noise measurement (phone dB meter) at 1m.  
-- **Prototype 3:** integrate with a mock cleaning mechanism (e.g., a rotating brush or sliding tray mock) and evaluate mechanical reliability over repeated cycles (e.g., 50–250 cycles).
-
+- **Prototype 2:**  
+- **Prototype 3:** 
 ---
 
 ## 12) Repo Structure (for the grader / reader)
