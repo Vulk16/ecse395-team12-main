@@ -183,8 +183,8 @@ Each trial follows:
 ## 12) Repo Structure (for the grader / reader)
 
 - `src/main.cpp` : motor + IR integrated prototype code  
-- `photos/` : wiring + sensor placement photos  
-- `videos/` : behavior evidence videos  
+- `hardware/` : wiring + sensor placement photos  
+- `test/` : behavior evidence videos  
 - `README.md` : summary + links to this prototype section
 
 ### Prototype 1 (this folder) structure (actual paths used above)
