@@ -157,7 +157,7 @@ Each trial follows:
 
 ## 9) Learning / Insights (What we learned)
 
-1. **Power delivery is a first-order risk**: TT motor stall is common if powered from 3.3V; driver should be fed from USB 5V (VBUS) for realistic torque.  
+1. **Power delivery is a first-order risk**: TT motor stall is common if powered from 3.3V; driver should be fed from USB 5V (VBUS) or Breadboard Power Supply Module for realistic torque.  
 2. **Safety gating is feasible in software**: a simple state machine can enforce “never run motor with cat present” and still achieve a predictable cleaning cycle.  
 3. **False triggers must be managed**: a leave-confirm delay and debounce are necessary to avoid cleaning when the cat briefly occludes the sensor.  
 4. **Sensor polarity variability is real**: IR modules can be active-low or active-high; runtime-configurable logic reduces integration friction.
