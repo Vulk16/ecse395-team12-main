@@ -1,305 +1,422 @@
-// ===============================
-// TT Motor Controller (ESP32 + L9110S)
-// Features:
-// - Manual cleaning cycle trigger
-// - Safety gating: cat-present blocks motor
-// - Emergency stop (latched until released)
-// - Soft start/stop via PWM ramp
-// - Non-blocking state machine (millis-based)
-// - Serial logging for testing
-// ===============================
-
 #include <Arduino.h>
 
-// ---------- L9110S Control Pins (Channel A) ----------
-static const int PIN_IA1 = 26; // L9110S IA1
-static const int PIN_IA2 = 27; // L9110S IA2
+/*
+  Cat Litterbox Prototype - Motor Subsystem (TT Motor + L9110S + IR Obstacle Sensor)
+  Board: Adafruit Feather ESP32 V2
+  Framework: Arduino (PlatformIO)
 
-// ---------- Inputs (active-low with internal pullups) ----------
-static const int PIN_MANUAL_BTN  = 33; // to GND when pressed
-static const int PIN_ESTOP_BTN   = 32; // to GND when pressed
-static const int PIN_CAT_PRESENT = 23; // to GND when cat is present (switch closed)
+  ---------- Hardware wiring ----------
+  Motor driver (L9110S, Motor-B):
+  - ESP32 A0 -> B1A
+  - ESP32 A1 -> B2A (or the other Motor-B input pin on your board)
+  - TT motor -> MOTOR B terminals
+  - Driver VCC -> VBUS (USB 5V recommended)
+  - Driver GND -> ESP32 GND (common ground REQUIRED)
 
-// ---------- PWM (LEDC) ----------
-static const int PWM_CH_IA1 = 0;
-static const int PWM_CH_IA2 = 1;
-static const int PWM_FREQ   = 20000; // 20 kHz reduces audible whine
-static const int PWM_RES    = 8;     // 0..255
+  IR Obstacle Module (SunFounder):
+  - VCC -> ESP32 3V (3.3V)
+  - GND -> ESP32 GND
+  - OUT -> ESP32 A2
 
-// ---------- Cleaning Cycle Parameters ----------
-static const uint8_t PWM_TARGET_FWD = 210;  // 0..255 (tune for torque/noise)
-static const uint8_t PWM_TARGET_REV = 180;  // reverse speed
-static const uint32_t RAMP_MS       = 1200; // soft start/stop duration
-static const uint32_t RUN_FWD_MS    = 5000; // forward run time
-static const uint32_t PAUSE_MS      = 800;  // pause between directions
-static const uint32_t RUN_REV_MS    = 2000; // reverse run time
-static const uint32_t COOLDOWN_MS   = 4000; // lockout after cycle
+  ---------- Prototype logic ----------
+  We do NOT clean while the cat is present.
+  We clean AFTER the cat leaves (IR no longer detects obstacle),
+  plus a short delay (leave-confirm delay), then run one cleaning cycle.
+  A cooldown prevents repeated cleaning too frequently.
 
-// ---------- Debounce ----------
-static const uint32_t DEBOUNCE_MS = 35;
-static uint32_t tLastPress = 0;
-static bool manualPrev = HIGH;
+  ---------- Manual controls ----------
+  Serial commands:
+  - h : help menu
+  - p : print status
+  - c : force cleaning now
+  - s : emergency stop (locks in STOPPED state)
+  - r : reset from STOPPED back to IDLE
+  - d : toggle trigger edge (detect vs leave)
+  - l : toggle active logic (active-low vs active-high)
+*/
 
-// ---------- State Machine ----------
-enum class State {
-  IDLE,
-  RAMP_UP_FWD,
-  RUN_FWD,
-  PAUSE,
-  RAMP_UP_REV,
-  RUN_REV,
-  RAMP_DOWN,
-  COOLDOWN,
-  ESTOP_LATCHED
+//
+// -------------------- Pin Mapping --------------------
+//
+static const int PIN_IN1 = A0;      // L9110S Motor-B input 1
+static const int PIN_IN2 = A1;      // L9110S Motor-B input 2
+static const int PIN_IR_OUT = A2;   // IR obstacle module digital output
+static const int PIN_LED = LED_BUILTIN;
+
+//
+// -------------------- PWM (LEDC) Setup --------------------
+//
+static const int CH1 = 0;
+static const int CH2 = 1;
+static const int PWM_RES_BITS = 8;       // 0..255
+static const int PWM_FREQ_HZ = 20000;    // quiet PWM
+
+//
+// -------------------- Motor Parameters --------------------
+//
+static const uint8_t DUTY_MAX = 220;             // adjust for torque vs noise (0..255)
+static const uint8_t RAMP_STEP = 5;              // duty increment/decrement per step
+static const uint32_t RAMP_STEP_DELAY_MS = 8;    // ramp smoothness
+
+//
+// -------------------- Timing Parameters --------------------
+//
+static const uint32_t CLEAN_RUN_MS = 3500;        // cleaning action duration
+static const uint32_t POST_STOP_MS = 800;         // pause after motor stops
+static const uint32_t COOLDOWN_MS = 3UL * 60UL * 1000UL; // 3 minutes
+static const uint32_t LEAVE_CONFIRM_MS = 1500;    // wait after "cat leaves" before cleaning
+static const uint32_t DEBOUNCE_MS = 80;           // debounce for IR transitions
+
+//
+// -------------------- IR Logic Parameters --------------------
+//
+// Many IR obstacle modules are ACTIVE-LOW when an obstacle is detected (OUT=LOW).
+// If your module is opposite, you can toggle at runtime via serial command 'l'.
+//
+static bool IR_ACTIVE_LOW = true;
+
+// Trigger policy:
+// If TRIGGER_ON_DETECT = false: event fires when obstacle is no longer detected (cat leaves) -> recommended.
+// If true: event fires when obstacle is detected (cat arrives).
+static bool TRIGGER_ON_DETECT = false;
+
+//
+// -------------------- State Machine --------------------
+//
+enum class SysState {
+  IDLE,            // waiting for cat presence/leave event
+  CAT_PRESENT,     // obstacle currently detected
+  WAIT_LEAVE_DELAY,// cat left, waiting LEAVE_CONFIRM_MS before cleaning
+  CLEANING,        // run motor cycle
+  COOLDOWN,        // cooldown after cleaning
+  STOPPED_MANUAL   // manual emergency stop (latched)
 };
 
-static State state = State::IDLE;
-static uint32_t tEnter = 0;
+static SysState state = SysState::IDLE;
 
-// Track current direction and duty for ramp-down
-enum class Dir { STOP, FWD, REV };
-static Dir currentDir = Dir::STOP;
-static uint8_t currentDuty = 0;
+static uint32_t t_state_enter = 0;
+static uint32_t t_last_clean = 0;
+static uint32_t t_last_edge_ms = 0;
 
-// ---------- Input helpers (active-low) ----------
-static bool catPresent()   { return digitalRead(PIN_CAT_PRESENT) == LOW; }
-static bool estopPressed() { return digitalRead(PIN_ESTOP_BTN) == LOW; }
-
-// ---------- Logging ----------
-static void logLine(const char* msg) {
-  Serial.print("[LOG] ");
-  Serial.print(msg);
-  Serial.print(" | cat=");
-  Serial.print(catPresent() ? "YES" : "NO");
-  Serial.print(" estop=");
-  Serial.print(estopPressed() ? "PRESSED" : "OK");
-  Serial.print(" dir=");
-  if (currentDir == Dir::FWD) Serial.print("FWD");
-  else if (currentDir == Dir::REV) Serial.print("REV");
-  else Serial.print("STOP");
-  Serial.print(" duty=");
-  Serial.println(currentDuty);
+//
+// -------------------- Motor Helper Functions --------------------
+//
+static void motorStopHard() {
+  ledcWrite(CH1, 0);
+  ledcWrite(CH2, 0);
+  digitalWrite(PIN_IN1, LOW);
+  digitalWrite(PIN_IN2, LOW);
 }
 
-static void enterState(State s, const char* msg) {
+static void motorForwardDuty(uint8_t duty) {
+  // Forward: IN1 PWM, IN2 LOW
+  ledcWrite(CH2, 0);
+  digitalWrite(PIN_IN2, LOW);
+  ledcWrite(CH1, duty);
+}
+
+static void motorReverseDuty(uint8_t duty) {
+  // Reverse: IN1 LOW, IN2 PWM
+  ledcWrite(CH1, 0);
+  digitalWrite(PIN_IN1, LOW);
+  ledcWrite(CH2, duty);
+}
+
+static void motorRampForward(uint8_t dutyTarget) {
+  // Soft-start forward
+  for (uint16_t d = 0; d <= dutyTarget; d += RAMP_STEP) {
+    motorForwardDuty((uint8_t)d);
+    delay(RAMP_STEP_DELAY_MS);
+  }
+}
+
+static void motorRampStopFrom(uint8_t dutyStart) {
+  // Soft-stop forward direction ramp down
+  for (int d = dutyStart; d >= 0; d -= (int)RAMP_STEP) {
+    motorForwardDuty((uint8_t)d);
+    delay(RAMP_STEP_DELAY_MS);
+  }
+  motorStopHard();
+}
+
+static void setState(SysState s) {
   state = s;
-  tEnter = millis();
-  logLine(msg);
+  t_state_enter = millis();
 }
 
-// ---------- Safety gate ----------
-static bool safeToRun() {
-  if (estopPressed()) return false;
-  if (catPresent())   return false;
-  return true;
+//
+// -------------------- IR Input Helpers --------------------
+//
+static bool irObstacleDetectedRaw() {
+  // Returns true if IR sensor indicates "obstacle detected"
+  int v = digitalRead(PIN_IR_OUT);
+  if (IR_ACTIVE_LOW) {
+    return (v == LOW);
+  } else {
+    return (v == HIGH);
+  }
 }
 
-// ---------- PWM write for L9110S ----------
-// L9110S direction control:
-// - Forward: IA1 = PWM, IA2 = LOW
-// - Reverse: IA1 = LOW, IA2 = PWM
-// - Stop:    IA1 = LOW, IA2 = LOW
-static void motorStop() {
-  ledcWrite(PWM_CH_IA1, 0);
-  ledcWrite(PWM_CH_IA2, 0);
-  digitalWrite(PIN_IA1, LOW);
-  digitalWrite(PIN_IA2, LOW);
-  currentDir = Dir::STOP;
-  currentDuty = 0;
+static bool irEdgeEventDebounced(bool obstacleNow) {
+  // Debounced edge detection on obstacle state
+  static bool lastObstacle = false;
+  uint32_t now = millis();
+
+  // debounce window
+  if ((now - t_last_edge_ms) < DEBOUNCE_MS) {
+    lastObstacle = obstacleNow;
+    return false;
+  }
+
+  bool event = false;
+
+  if (TRIGGER_ON_DETECT) {
+    // event on becoming detected
+    if (obstacleNow && !lastObstacle) event = true;
+  } else {
+    // event on becoming NOT detected (leave)
+    if (!obstacleNow && lastObstacle) event = true;
+  }
+
+  if (event) {
+    t_last_edge_ms = now;
+  }
+
+  lastObstacle = obstacleNow;
+  return event;
 }
 
-static void motorForward(uint8_t duty) {
-  // Ensure reverse channel is off
-  ledcWrite(PWM_CH_IA2, 0);
-  digitalWrite(PIN_IA2, LOW);
-
-  // Apply PWM on IA1
-  ledcWrite(PWM_CH_IA1, duty);
-  currentDir = Dir::FWD;
-  currentDuty = duty;
+//
+// -------------------- Serial UI --------------------
+//
+static void printHelp() {
+  Serial.println();
+  Serial.println("=== Cat Litterbox Motor Prototype (IR + L9110S) ===");
+  Serial.println("h : help");
+  Serial.println("p : print status");
+  Serial.println("c : force cleaning now");
+  Serial.println("s : emergency stop (latched)");
+  Serial.println("r : reset from STOPPED back to IDLE");
+  Serial.println("d : toggle trigger edge (detect <-> leave)");
+  Serial.println("l : toggle IR active logic (active-low <-> active-high)");
+  Serial.println("===================================================");
 }
 
-static void motorReverse(uint8_t duty) {
-  // Ensure forward channel is off
-  ledcWrite(PWM_CH_IA1, 0);
-  digitalWrite(PIN_IA1, LOW);
-
-  // Apply PWM on IA2
-  ledcWrite(PWM_CH_IA2, duty);
-  currentDir = Dir::REV;
-  currentDuty = duty;
+static const char* stateName(SysState s) {
+  switch (s) {
+    case SysState::IDLE: return "IDLE";
+    case SysState::CAT_PRESENT: return "CAT_PRESENT";
+    case SysState::WAIT_LEAVE_DELAY: return "WAIT_LEAVE_DELAY";
+    case SysState::CLEANING: return "CLEANING";
+    case SysState::COOLDOWN: return "COOLDOWN";
+    case SysState::STOPPED_MANUAL: return "STOPPED_MANUAL";
+    default: return "UNKNOWN";
+  }
 }
 
-// ---------- Ramp helper ----------
-static uint8_t ramp(uint8_t startDuty, uint8_t endDuty, uint32_t elapsed, uint32_t total) {
-  if (total == 0) return endDuty;
-  if (elapsed >= total) return endDuty;
-  float a = (float)elapsed / (float)total;
-  float d = (1.0f - a) * startDuty + a * endDuty;
-  if (d < 0) d = 0;
-  if (d > 255) d = 255;
-  return (uint8_t)(d + 0.5f);
+static void printStatus() {
+  Serial.print("State=");
+  Serial.print(stateName(state));
+  Serial.print(" | IR_ACTIVE_LOW=");
+  Serial.print(IR_ACTIVE_LOW ? "true" : "false");
+  Serial.print(" | TRIGGER_ON_DETECT=");
+  Serial.print(TRIGGER_ON_DETECT ? "true" : "false");
+  Serial.print(" | obstacleDetected=");
+  Serial.print(irObstacleDetectedRaw() ? "true" : "false");
+  Serial.print(" | lastCleanAgo(ms)=");
+  Serial.println(millis() - t_last_clean);
 }
 
-// ---------- Manual press edge detect ----------
-static bool manualPressEdge() {
-  bool now = digitalRead(PIN_MANUAL_BTN); // HIGH idle, LOW pressed
-  bool edge = false;
+static void handleSerial() {
+  while (Serial.available()) {
+    char c = Serial.read();
+    if (c == '\n' || c == '\r') continue;
 
-  if (manualPrev == HIGH && now == LOW) {
-    uint32_t t = millis();
-    if (t - tLastPress > DEBOUNCE_MS) {
-      edge = true;
-      tLastPress = t;
+    if (c == 'h') printHelp();
+    else if (c == 'p') printStatus();
+    else if (c == 's') {
+      Serial.println("Manual STOP (latched)");
+      motorStopHard();
+      setState(SysState::STOPPED_MANUAL);
+    }
+    else if (c == 'r') {
+      Serial.println("Reset -> IDLE");
+      motorStopHard();
+      setState(SysState::IDLE);
+    }
+    else if (c == 'c') {
+      Serial.println("Manual CLEAN start");
+      if (state != SysState::STOPPED_MANUAL) {
+        setState(SysState::CLEANING);
+      }
+    }
+    else if (c == 'd') {
+      TRIGGER_ON_DETECT = !TRIGGER_ON_DETECT;
+      Serial.print("TRIGGER_ON_DETECT toggled -> ");
+      Serial.println(TRIGGER_ON_DETECT ? "true (detect event)" : "false (leave event)");
+    }
+    else if (c == 'l') {
+      IR_ACTIVE_LOW = !IR_ACTIVE_LOW;
+      Serial.print("IR_ACTIVE_LOW toggled -> ");
+      Serial.println(IR_ACTIVE_LOW ? "true (active LOW)" : "false (active HIGH)");
     }
   }
-  manualPrev = now;
-  return edge;
 }
 
+//
+// -------------------- Setup / Loop --------------------
+//
 void setup() {
   Serial.begin(115200);
+  delay(200);
 
-  pinMode(PIN_IA1, OUTPUT);
-  pinMode(PIN_IA2, OUTPUT);
+  Serial.println("Boot OK - Cat Litterbox Motor Prototype (IR + L9110S)");
+  Serial.println("Power note: Driver VCC should be VBUS (USB 5V). 3.3V may not spin TT motor.");
 
-  pinMode(PIN_MANUAL_BTN, INPUT_PULLUP);
-  pinMode(PIN_ESTOP_BTN,  INPUT_PULLUP);
-  pinMode(PIN_CAT_PRESENT, INPUT_PULLUP);
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
 
-  // Setup PWM channels for IA1 and IA2
-  ledcSetup(PWM_CH_IA1, PWM_FREQ, PWM_RES);
-  ledcSetup(PWM_CH_IA2, PWM_FREQ, PWM_RES);
-  ledcAttachPin(PIN_IA1, PWM_CH_IA1);
-  ledcAttachPin(PIN_IA2, PWM_CH_IA2);
+  pinMode(PIN_IR_OUT, INPUT);  // IR module OUT is a digital signal
+  pinMode(PIN_IN1, OUTPUT);
+  pinMode(PIN_IN2, OUTPUT);
 
-  motorStop();
-  enterState(State::IDLE, "BOOT -> IDLE");
+  ledcSetup(CH1, PWM_FREQ_HZ, PWM_RES_BITS);
+  ledcSetup(CH2, PWM_FREQ_HZ, PWM_RES_BITS);
+  ledcAttachPin(PIN_IN1, CH1);
+  ledcAttachPin(PIN_IN2, CH2);
+
+  motorStopHard();
+  t_last_clean = 0;
+
+  setState(SysState::IDLE);
+  printHelp();
+  printStatus();
 }
 
 void loop() {
-  // ---------- E-stop always wins ----------
-  if (estopPressed() && state != State::ESTOP_LATCHED) {
-    motorStop();
-    enterState(State::ESTOP_LATCHED, "E-STOP LATCHED (motor stopped)");
-  }
+  handleSerial();
 
-  if (state == State::ESTOP_LATCHED) {
-    // Stay latched until E-stop released
-    if (!estopPressed()) {
-      enterState(State::IDLE, "E-STOP released -> IDLE");
-    }
+  if (state == SysState::STOPPED_MANUAL) {
+    // Latched stop: do nothing until 'r'
+    digitalWrite(PIN_LED, LOW);
+    motorStopHard();
+    delay(10);
     return;
   }
 
-  // ---------- Cat enters while running: stop immediately ----------
-  if (catPresent()) {
-    if (state != State::IDLE && state != State::COOLDOWN) {
-      motorStop();
-      enterState(State::COOLDOWN, "Cat detected -> immediate stop -> COOLDOWN");
-    }
-  }
-
-  // ---------- Manual trigger ----------
-  if (manualPressEdge()) {
-    if (state == State::IDLE && safeToRun()) {
-      enterState(State::RAMP_UP_FWD, "Manual trigger -> RAMP_UP_FWD");
-    } else {
-      if (state != State::IDLE) Serial.println("[INFO] Manual trigger ignored: not IDLE");
-      if (!safeToRun())        Serial.println("[INFO] Manual trigger blocked: cat present or E-stop");
-    }
-  }
-
-  // ---------- State machine ----------
   uint32_t now = millis();
-  uint32_t dt  = now - tEnter;
+  bool obstacleNow = irObstacleDetectedRaw();
+
+  // Basic presence tracking
+  if (obstacleNow && state == SysState::IDLE) {
+    setState(SysState::CAT_PRESENT);
+    Serial.println("IR: obstacle detected -> CAT_PRESENT");
+  }
+  if (obstacleNow && state == SysState::COOLDOWN) {
+    // still cooldown but cat present
+    // keep state, do nothing
+  }
+
+  // Edge event (detect or leave), debounced
+  bool edgeEvent = irEdgeEventDebounced(obstacleNow);
+  if (edgeEvent) {
+    if (TRIGGER_ON_DETECT) {
+      Serial.println("IR EVENT: DETECT");
+    } else {
+      Serial.println("IR EVENT: LEAVE");
+    }
+  }
 
   switch (state) {
-    case State::IDLE: {
-      motorStop();
+    case SysState::IDLE: {
+      digitalWrite(PIN_LED, LOW);
+      // Waiting for presence
       break;
     }
 
-    case State::RAMP_UP_FWD: {
-      if (!safeToRun()) {
-        motorStop();
-        enterState(State::COOLDOWN, "Unsafe during ramp -> COOLDOWN");
+    case SysState::CAT_PRESENT: {
+      // Cat is present: do not clean
+      digitalWrite(PIN_LED, HIGH);
+
+      // If we are triggering on LEAVE, watch for leave event to start delay
+      if (!TRIGGER_ON_DETECT && edgeEvent) {
+        Serial.println("Cat left -> starting leave-confirm delay");
+        setState(SysState::WAIT_LEAVE_DELAY);
+      }
+
+      break;
+    }
+
+    case SysState::WAIT_LEAVE_DELAY: {
+      digitalWrite(PIN_LED, HIGH);
+
+      // If cat comes back during the delay, cancel cleaning
+      if (obstacleNow) {
+        Serial.println("Cat returned during delay -> back to CAT_PRESENT");
+        setState(SysState::CAT_PRESENT);
         break;
       }
-      uint8_t duty = ramp(0, PWM_TARGET_FWD, dt, RAMP_MS);
-      motorForward(duty);
-      if (dt >= RAMP_MS) enterState(State::RUN_FWD, "RAMP_UP_FWD -> RUN_FWD");
-      break;
-    }
 
-    case State::RUN_FWD: {
-      if (!safeToRun()) {
-        motorStop();
-        enterState(State::COOLDOWN, "Unsafe during RUN_FWD -> COOLDOWN");
+      // Cooldown check before cleaning
+      if (t_last_clean != 0 && (now - t_last_clean) < COOLDOWN_MS) {
+        Serial.println("Cooldown active -> skipping cleaning");
+        setState(SysState::COOLDOWN);
         break;
       }
-      motorForward(PWM_TARGET_FWD);
-      if (dt >= RUN_FWD_MS) {
-        motorStop();
-        enterState(State::PAUSE, "RUN_FWD done -> PAUSE");
+
+      // Wait a short time to ensure cat is truly away
+      if ((now - t_state_enter) >= LEAVE_CONFIRM_MS) {
+        Serial.println("Leave confirmed -> start CLEANING");
+        setState(SysState::CLEANING);
       }
+
       break;
     }
 
-    case State::PAUSE: {
-      motorStop();
-      if (dt >= PAUSE_MS) {
-        if (safeToRun()) enterState(State::RAMP_UP_REV, "PAUSE -> RAMP_UP_REV");
-        else enterState(State::COOLDOWN, "Unsafe after pause -> COOLDOWN");
-      }
-      break;
-    }
+    case SysState::CLEANING: {
+      digitalWrite(PIN_LED, HIGH);
 
-    case State::RAMP_UP_REV: {
-      if (!safeToRun()) {
-        motorStop();
-        enterState(State::COOLDOWN, "Unsafe during REV ramp -> COOLDOWN");
+      // If cat appears again, immediately stop (safety)
+      if (obstacleNow) {
+        Serial.println("Safety: obstacle detected during cleaning -> STOP");
+        motorStopHard();
+        setState(SysState::CAT_PRESENT);
         break;
       }
-      uint8_t duty = ramp(0, PWM_TARGET_REV, dt, RAMP_MS);
-      motorReverse(duty);
-      if (dt >= RAMP_MS) enterState(State::RUN_REV, "RAMP_UP_REV -> RUN_REV");
+
+      // Perform one cleaning cycle (soft start -> run -> soft stop)
+      motorRampForward(DUTY_MAX);
+      motorForwardDuty(DUTY_MAX);
+      delay(CLEAN_RUN_MS);
+      motorRampStopFrom(DUTY_MAX);
+      delay(POST_STOP_MS);
+
+      t_last_clean = millis();
+      Serial.println("Cleaning complete -> COOLDOWN");
+      setState(SysState::COOLDOWN);
       break;
     }
 
-    case State::RUN_REV: {
-      if (!safeToRun()) {
-        motorStop();
-        enterState(State::COOLDOWN, "Unsafe during RUN_REV -> COOLDOWN");
-        break;
+    case SysState::COOLDOWN: {
+      digitalWrite(PIN_LED, LOW);
+
+      // If cat is present, just remain calm in cooldown
+      if (obstacleNow) {
+        // optional: keep track of presence
       }
-      motorReverse(PWM_TARGET_REV);
-      if (dt >= RUN_REV_MS) enterState(State::RAMP_DOWN, "RUN_REV done -> RAMP_DOWN");
-      break;
-    }
 
-    case State::RAMP_DOWN: {
-      // Ramp down smoothly in the current direction
-      uint8_t duty = ramp(currentDuty, 0, dt, RAMP_MS);
-      if (currentDir == Dir::REV) motorReverse(duty);
-      else motorForward(duty);
-
-      if (dt >= RAMP_MS) {
-        motorStop();
-        enterState(State::COOLDOWN, "RAMP_DOWN -> COOLDOWN");
+      // End cooldown
+      if (t_last_clean != 0 && (now - t_last_clean) >= COOLDOWN_MS) {
+        Serial.println("Cooldown finished -> IDLE");
+        setState(SysState::IDLE);
       }
-      break;
-    }
 
-    case State::COOLDOWN: {
-      motorStop();
-      if (dt >= COOLDOWN_MS) enterState(State::IDLE, "COOLDOWN done -> IDLE");
       break;
     }
 
     default:
-      motorStop();
-      enterState(State::IDLE, "Unknown state -> IDLE");
       break;
   }
+
+  delay(5);
 }
