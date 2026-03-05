@@ -99,6 +99,53 @@ static uint32_t t_last_clean = 0;
 static uint32_t t_last_edge_ms = 0;
 
 //
+// -------------------- [ADDED] Serial Monitoring (non-invasive) --------------------
+//
+// These additions do NOT change control logic. They only print helpful debugging info.
+//
+static uint32_t g_lastAliveMs = 0;
+static bool g_lastObstacle = false;
+static bool g_hasLastObstacle = false;
+
+static void logStateChange(const char* nextState) {
+  // English comment: Prints every state transition for debugging.
+  Serial.print("[STATE] -> ");
+  Serial.println(nextState);
+}
+
+static void logMotorAction(const char* msg) {
+  // English comment: Prints motor action messages to confirm execution.
+  Serial.print("[MOTOR] ");
+  Serial.println(msg);
+}
+
+static void heartbeat() {
+  // English comment: Prints a heartbeat every 1 second so we know loop() is alive.
+  uint32_t now = millis();
+  if (now - g_lastAliveMs >= 1000) {
+    g_lastAliveMs = now;
+    Serial.print("Alive: ");
+    Serial.println(now / 1000);
+  }
+}
+
+static void logIRChangeIfAny(bool obstacleNow) {
+  // English comment: Logs IR transitions (BLOCKED/CLEAR) only when it changes.
+  if (!g_hasLastObstacle) {
+    g_hasLastObstacle = true;
+    g_lastObstacle = obstacleNow;
+    Serial.print("[IR] init -> ");
+    Serial.println(obstacleNow ? "BLOCKED" : "CLEAR");
+    return;
+  }
+  if (obstacleNow != g_lastObstacle) {
+    g_lastObstacle = obstacleNow;
+    Serial.print("[IR] change -> ");
+    Serial.println(obstacleNow ? "BLOCKED" : "CLEAR");
+  }
+}
+
+//
 // -------------------- Motor Helper Functions --------------------
 //
 static void motorStopHard() {
@@ -124,24 +171,38 @@ static void motorReverseDuty(uint8_t duty) {
 
 static void motorRampForward(uint8_t dutyTarget) {
   // Soft-start forward
+  logMotorAction("Soft-start (ramp up)");
   for (uint16_t d = 0; d <= dutyTarget; d += RAMP_STEP) {
     motorForwardDuty((uint8_t)d);
     delay(RAMP_STEP_DELAY_MS);
   }
+  logMotorAction("Ramp up complete");
 }
 
 static void motorRampStopFrom(uint8_t dutyStart) {
   // Soft-stop forward direction ramp down
+  logMotorAction("Soft-stop (ramp down)");
   for (int d = dutyStart; d >= 0; d -= (int)RAMP_STEP) {
     motorForwardDuty((uint8_t)d);
     delay(RAMP_STEP_DELAY_MS);
   }
   motorStopHard();
+  logMotorAction("Motor hard stop issued");
 }
 
 static void setState(SysState s) {
   state = s;
   t_state_enter = millis();
+
+  // [ADDED] Log transitions without changing behavior
+  logStateChange(
+    (s == SysState::IDLE) ? "IDLE" :
+    (s == SysState::CAT_PRESENT) ? "CAT_PRESENT" :
+    (s == SysState::WAIT_LEAVE_DELAY) ? "WAIT_LEAVE_DELAY" :
+    (s == SysState::CLEANING) ? "CLEANING" :
+    (s == SysState::COOLDOWN) ? "COOLDOWN" :
+    (s == SysState::STOPPED_MANUAL) ? "STOPPED_MANUAL" : "UNKNOWN"
+  );
 }
 
 //
@@ -236,16 +297,19 @@ static void handleSerial() {
     else if (c == 'p') printStatus();
     else if (c == 's') {
       Serial.println("Manual STOP (latched)");
+      logMotorAction("Manual STOP requested");
       motorStopHard();
       setState(SysState::STOPPED_MANUAL);
     }
     else if (c == 'r') {
       Serial.println("Reset -> IDLE");
+      logMotorAction("Manual reset requested");
       motorStopHard();
       setState(SysState::IDLE);
     }
     else if (c == 'c') {
       Serial.println("Manual CLEAN start");
+      logMotorAction("Manual CLEAN requested");
       if (state != SysState::STOPPED_MANUAL) {
         setState(SysState::CLEANING);
       }
@@ -270,6 +334,11 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
+  // [ADDED] Boot banner for monitor clarity
+  Serial.println();
+  Serial.println("[BOOT] TT Motor + L9110S + IR Obstacle Sensor (Safety Gating Prototype)");
+  Serial.println("[BOOT] Use 'h' for help. Monitor baud = 115200.");
+
   Serial.println("Boot OK - Cat Litterbox Motor Prototype (IR + L9110S)");
   Serial.println("Power note: Driver VCC should be VBUS (USB 5V). 3.3V may not spin TT motor.");
 
@@ -291,10 +360,16 @@ void setup() {
   setState(SysState::IDLE);
   printHelp();
   printStatus();
+
+  // [ADDED] Log initial IR state
+  logIRChangeIfAny(irObstacleDetectedRaw());
 }
 
 void loop() {
   handleSerial();
+
+  // [ADDED] Heartbeat so you always see it's running
+  heartbeat();
 
   if (state == SysState::STOPPED_MANUAL) {
     // Latched stop: do nothing until 'r'
@@ -306,6 +381,9 @@ void loop() {
 
   uint32_t now = millis();
   bool obstacleNow = irObstacleDetectedRaw();
+
+  // [ADDED] Log IR changes (BLOCKED/CLEAR) without altering logic
+  logIRChangeIfAny(obstacleNow);
 
   // Basic presence tracking
   if (obstacleNow && state == SysState::IDLE) {
@@ -379,13 +457,16 @@ void loop() {
       // If cat appears again, immediately stop (safety)
       if (obstacleNow) {
         Serial.println("Safety: obstacle detected during cleaning -> STOP");
+        logMotorAction("Safety stop triggered by IR during cleaning");
         motorStopHard();
         setState(SysState::CAT_PRESENT);
         break;
       }
 
       // Perform one cleaning cycle (soft start -> run -> soft stop)
+      logMotorAction("Cleaning cycle begin");
       motorRampForward(DUTY_MAX);
+      logMotorAction("Run at DUTY_MAX");
       motorForwardDuty(DUTY_MAX);
       delay(CLEAN_RUN_MS);
       motorRampStopFrom(DUTY_MAX);
@@ -393,6 +474,7 @@ void loop() {
 
       t_last_clean = millis();
       Serial.println("Cleaning complete -> COOLDOWN");
+      logMotorAction("Cleaning cycle complete");
       setState(SysState::COOLDOWN);
       break;
     }
