@@ -119,7 +119,23 @@ Each trial follows:
 
 > Add actual files/links below.
 
+### Photos
+- `motor-l9110s-tt/hardware/setup.jpg`  
+  *Caption:* As-built bench setup photo (ESP32 + motor driver + TT motor + IR sensor + power module).
 
+![As-built Setup Photo](motor-l9110s-tt/hardware/setup.jpg)
+
+### Videos (actual submitted evidence files in this repo)
+- `motor-l9110s-tt/test/cat_activity_detection_cleaning.mp4`  
+  *Caption:* Demonstrates cat-present lockout, then leave-confirm delay, then cleaning cycle.  
+  *Link:* [cat_activity_detection_cleaning.mp4](motor-l9110s-tt/test/cat_activity_detection_cleaning.mp4)
+
+- `motor-l9110s-tt/test/cat_activity_detection_during_CD.mp4`  
+  *Caption:* Demonstrates cooldown preventing repeated cleaning (activity occurs during cooldown window and cleaning is blocked).  
+  *Link:* [cat_activity_detection_during_CD.mp4](motor-l9110s-tt/test/cat_activity_detection_during_CD.mp4)
+
+> Note: GitHub may show “Sorry about that, but we can’t show files that are this big right now.”  
+> Use the **“View raw”** button to open/download the `.mp4`.
 
 ### Videos
 - `videos/proto_motor_leave_then_clean.mp4`  
@@ -182,3 +198,7 @@ Each trial follows:
 - `photos/` : wiring + sensor placement photos  
 - `videos/` : behavior evidence videos  
 - `README.md` : summary + links to this prototype section
+
+### Prototype 1 (this folder) structure (actual paths used above)
+- `motor-l9110s-tt/hardware/` : wiring diagram + setup photo  
+- `motor-l9110s-tt/test/` : behavior evidence videos (`.mp4`)
