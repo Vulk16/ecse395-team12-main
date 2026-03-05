@@ -117,8 +117,6 @@ Each trial follows:
 
 ## 7) Evidence (Photos/Videos + Captions)
 
-> Add actual files/links below.
-
 ### Photos
 - `motor-l9110s-tt/hardware/setup.jpg`  
   *Caption:* As-built bench setup photo (ESP32 + motor driver + TT motor + IR sensor + power module).
