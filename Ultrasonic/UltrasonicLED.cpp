@@ -1,7 +1,5 @@
 /*
-  Read data from an ultrasonic sensor connected to the ESP32 Development 
-  Board and print the distance measurement in centimeters through the 
-  serial communication.
+  Read data from an ultrasonic sensor connected to the ESP32 and print the distance measurement in centimeters for the waste tray fill sensoring subsystem.
 
   Board: ESP32 Development Board
   Component: Ultrasonic distance Sensor(HC-SR04)
