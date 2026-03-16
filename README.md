@@ -173,7 +173,7 @@ Each trial follows:
 
 ---
 
-# Prototype 3 – TT Motor with PIR Motion Sensor
+# Prototype 2 – TT Motor with PIR Motion Sensor
 **Team:** ECSE 395 Team 12  
 **Owner:** 
 **Date:**   
@@ -202,7 +202,7 @@ Each trial follows:
 
 
 
-# Prototype 2 – Ultrasonic Sensor with Traffic Light LED
+# Prototype 3 – Ultrasonic Sensor with Traffic Light LED
 **Team:** ECSE 395 Team 12  
 **Owner:** Pamela Marrero  
 **Date:** 2026-03-16  
