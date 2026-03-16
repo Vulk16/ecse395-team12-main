@@ -1,4 +1,43 @@
+#if __has_include(<Arduino.h>)
 #include <Arduino.h>
+#else
+// Minimal Arduino-compatible stubs for hosts/IDEs where Arduino.h is unavailable
+#include <stdint.h>
+#include <stdio.h>
+#include <stdbool.h>
+
+#define HIGH 0x1
+#define LOW 0x0
+#define INPUT 0x0
+#define OUTPUT 0x1
+#define LED_BUILTIN 13
+#define A0 0
+#define A1 1
+#define A2 2
+
+inline void pinMode(int, int) {}
+inline void digitalWrite(int, int) {}
+inline int digitalRead(int) { return LOW; }
+inline unsigned long millis() { return 0UL; }
+inline void delay(unsigned long) {}
+inline void ledcSetup(int, int, int) {}
+inline void ledcAttachPin(int, int) {}
+inline void ledcWrite(int, int) {}
+
+struct SerialClass {
+  void begin(int) {}
+  int available() { return 0; }
+  int read() { return -1; }
+  void print(const char*) {}
+  void println(const char*) {}
+  void print(unsigned long v) { (void)v; }
+  void println(unsigned long v) { (void)v; }
+  void print(bool b) { (void)b; }
+  void println(bool b) { (void)b; }
+  void print(int v) { (void)v; }
+  void println(int v) { (void)v; }
+} Serial;
+#endif
 
 /*
   Cat Litterbox Prototype - Motor Subsystem (TT Motor + L9110S + IR Obstacle Sensor)
