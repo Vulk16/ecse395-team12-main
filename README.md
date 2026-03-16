@@ -173,13 +173,64 @@ Each trial follows:
 
 ---
 
-## 11) Next Steps (Prototype 2 / Prototype 3 suggestions)
+# Prototype 3 – TT Motor with PIR Motion Sensor
+**Team:** ECSE 395 Team 12  
+**Owner:** 
+**Date:**   
+**Prototype Type / Fidelity:** 
 
-- **Prototype 2:**  
-- **Prototype 3:** 
+## 1) Purpose
+---
+## 2) Connection to Verification & Validation Plan 
+---
+## 3) Hypotheses / Assumptions
+---
+## 4) Prototype Build
+---
+## 5) Control Logic Implemented
+---
+## 6) Test Plan
+---
+## 7) Evidence 
+---
+## 8) Results 
+---
+## 9) Learning / Insights 
+---
+## 10) How this prototype influenced the next design decision
 ---
 
-## 12) Repo Structure (for the grader / reader)
+
+
+# Prototype 2 – Ultrasonic Sensor with Traffic Light LED
+**Team:** ECSE 395 Team 12  
+**Owner:** Pamela Marrero  
+**Date:** 2026-03-16  
+**Prototype Type / Fidelity:** 
+
+## 1) Purpose
+---
+## 2) Connection to Verification & Validation Plan 
+---
+## 3) Hypotheses / Assumptions
+---
+## 4) Prototype Build
+---
+## 5) Control Logic Implemented
+---
+## 6) Test Plan
+---
+## 7) Evidence 
+---
+## 8) Results 
+---
+## 9) Learning / Insights 
+---
+## 10) How this prototype influenced the next design decision
+---
+
+---
+## Repo Structure (for the grader / reader)
 
 - `src/main.cpp` : motor + IR integrated prototype code  
 - `hardware/` : wiring + sensor placement photos  
@@ -189,3 +240,8 @@ Each trial follows:
 ### Prototype 1 structure
 - `motor-l9110s-tt/hardware/` : wiring diagram + setup photo  
 - `motor-l9110s-tt/test/` : behavior evidence videos (`.mp4`)
+
+### Prototype 2 structure
+
+### Prototype 3 structure
+
