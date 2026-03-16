@@ -7,7 +7,7 @@
   Component: Ultrasonic distance Sensor(HC-SR04)
 */
 
-#include <Arduino.h>
+//#include <Arduino.h>
 
 // Define the pin numbers for the ultrasonic sensor
 const int echoPin = 26;
