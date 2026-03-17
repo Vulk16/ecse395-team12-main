@@ -4,15 +4,15 @@ ECSE395 Team12 Cat Litter Box
 # Prototype 1 – Motor + Safety Gating (TT Motor + L9110S + ESP32 + IR Obstacle Sensor)
 
 **Team:** ECSE 395 Team 12  
-**Owner (this prototype write-up):** Weikang Sun (Motor/Actuation)  
+**Owner:** Weikang Sun  
 **Date:** 2026-03-04  
-**Prototype Type / Fidelity:** Medium-fidelity electronics + control logic prototype (bench test)
+**Prototype Type / Fidelity:** Medium-fidelity electronics + control logic prototype 
 
 ---
 
 ## 1) Purpose 
 
-**Primary question (risk/unknown):**  
+**Primary question:**  
 What is the safest and most efficient control behavior for a cleaning motor mechanism when a cat **enters**, **occupies**, and **leaves** the litter box?
 
 This directly supports our Verification & Validation focus on:  
@@ -30,7 +30,7 @@ This prototype is intentionally targeted at the V&V risk question:
 V&V alignment categories:
 - **Functional testing:** confirms “sensor → logic → motor action” works correctly
 - **Safety testing:** confirms motor is inhibited when a cat is present; emergency stop logic exists
-- **Noise consideration (future test):** provides adjustable PWM and soft-start/stop to reduce sudden motion and noise
+- **Noise consideration (future tests):** provides adjustable PWM and soft-start/stop to reduce sudden motion and noise
 
 ---
 
@@ -74,7 +74,7 @@ V&V alignment categories:
 *Figure 1. Wiring diagram of TT motor (L9110S) and IR obstacle sensor with ESP32 (Feather V2).*
 ---
 
-## 5) Control Logic Implemented (What the code does)
+## 5) Control Logic Implemented 
 
 ### 5.1 State machine (high level)
 - **IDLE:** waiting for cat interaction  
@@ -90,14 +90,14 @@ V&V alignment categories:
 
 ---
 
-## 6) Test Plan (How we tested)
+## 6) Test Plan 
 
 ### 6.1 Setup
 - Place IR sensor facing the “entry zone” of a mock litter box opening (or a small test box).
 - Use a stuffed animal / hand / object as a repeatable “cat present” stimulus.
 - Run PlatformIO serial monitor at 115200 baud to record state transitions.
 
-### 6.2 Procedure (Trials)
+### 6.2 Procedure 
 Each trial follows:
 1. Start in IDLE  
 2. Present obstacle to IR sensor → expect CAT_PRESENT, motor must stay OFF  
@@ -107,10 +107,10 @@ Each trial follows:
 6. After a completed cleaning cycle, attempt another leave event immediately → expect COOLDOWN blocks cleaning
 
 ### 6.3 Metrics recorded
-- **Correct gating:** motor runs only when cat is not present (pass/fail)
-- **Response time:** time from IR edge event to state change (qualitative now, measurable later)
+- **Correct gating:** motor runs only when cat is not present 
+- **Response time:** time from IR edge event to state change 
 - **False triggers:** counts of unexpected cleaning start
-- **Power adequacy:** motor start success (start/no start)
+- **Power adequacy:** motor start success (start vs no start)
 - **Repeatability:** successful operation across multiple cycles
 
 ---
@@ -211,7 +211,6 @@ This prototype supports the safety requirement that the litter box cleaning moto
 - battery wire
 
   **Motor driver (L9110S, Motor B channel):**
-
 
 - ESP32 **A0 → B1A**
 - ESP32 **A1 → B2A**
@@ -386,6 +385,30 @@ $$\text{Distance (cm)} = \frac{\text{Pulse Width (}\mu\text{s)}}{58}$$
 3.  **Error Handling:** Move the object too close ($< 2\text{ cm}$) or out of range to see how the system handles "0" or invalid readings.
 
 ## 7) Results
+
+**Link to all videos & photos folder**
+https://drive.google.com/drive/folders/1Ai6i-ZH49eCrZQjTG7fPYtYxGPL_R3D-?usp=drive_link 
+
+### Photos
+
+**Photo of ultrasonic sensor only**
+![Ultrasonic2](https://github.com/user-attachments/assets/4edeb12a-9af9-4665-b53d-94d9f9498bcf)
+
+**Photo of ultrasonic sensor with traffic LED**
+![Ultrasonic circuit with LED](https://github.com/user-attachments/assets/52002f45-bb10-40af-8ee4-b07bcd79fac1)
+
+### Videos
+
+**Video testing different heights**
+https://drive.google.com/file/d/1nmjqfK1wECNlLZD1Nay2QSyFhAWyeFt_/view?usp=drive_link 
+
+**Video testing with hand**
+https://drive.google.com/file/d/1vZYZ_xlM0_r-vUherxtPeok_0fJcGPXm/view?usp=drive_link
+
+**Video of monitor outputs**
+https://drive.google.com/file/d/1Y0TYfOP8pOxSHpBF8f93OvYOiVKN0SdR/view?usp=drive_link
+
+
 ### Observations
 * The HC-SR04 is highly directional. Must be placed at the top of the waste compartment facing downwards towards the litter. 
 * The LEDs provided immediate visual confirmation, which will be useful for end-users.
@@ -396,12 +419,13 @@ $$\text{Distance (cm)} = \frac{\text{Pulse Width (}\mu\text{s)}}{58}$$
 * LED state transitions at correct thresholds: **PASS**
 
 ## 8) Learning / Insights
-* **Smoothing is necessary:** For future iterations should use a "moving average" of 5–10 readings to prevent LED flickering at threshold boundaries.
-* **Environment Matters:** Dust from cat litter may settle on the ultrasonic transducers over time; the mechanical design should include a protective shroud or easy-clean access.
+* **Smoothing is necessary:** For future iterations should try to include noise filtering formulas such as moving averages or exponential smoothings of 5–10 readings to prevent LED flickering at threshold boundaries.
+* **Environment Matters:** Dust from cat litter may settle on the ultrasonic transducers over time. The design should include a protective cover or easy-clean access.
 * **Integration:** The "Red" state must be the determining logic for when the motor subsystem operates as well to prevent the filter from forcing more waste into a full bin.
 
 ## 9) Next Steps
-* “Can we prevent the cleaning motor from cycling if there is no room for more waste?” 
+* “Can we prevent the cleaning motor from cycling if there is no room for more waste?”
+  
 ## 10) Sources used:
 https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson29_traffic_light_module.html 
 https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson23_ultrasonic.html
