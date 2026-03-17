@@ -265,8 +265,10 @@ Figure shows wiring
 
 Video 1 shows how monitor works during cat detection process
   https://drive.google.com/file/d/1IGy9qfVO9d2NC5iS9x_Wp-vByGQHRoAa/view?usp=drive_link
+
 Video 2 shows how serial monitor and TT Motor works
   https://drive.google.com/file/d/1ViSXtDZpcQ6B9S4FActUbdBJVMCs-9Xc/view?usp=drive_link
+
 Video 3 shows how PIR and TT Motor cooprate and states transitions on the monitor
   https://drive.google.com/file/d/1gYcruBor-WW7cueBooxxviA5RqZq9Gf5/view?usp=drive_link
 
