@@ -177,7 +177,7 @@ Each trial follows:
 **Team:** ECSE 395 Team 12  
 **Owner:** Hanbing Wu
 **Date:**   3/16/2026
-**Prototype Type / Fidelity:** 
+**Prototype Type / Fidelity:** Medium-fidelity electronics + control logic prototype
 
 ## 1) Purpose
 The purpose of this prototype is to test whether a PIR motion sensor can reliably detect cat activity in the litter box area 
