@@ -10,7 +10,7 @@ ECSE395 Team12 Cat Litter Box
 
 ---
 
-## 1) Purpose (What question are we answering?)
+## 1) Purpose 
 
 **Primary question (risk/unknown):**  
 What is the safest and most efficient control behavior for a cleaning motor mechanism when a cat **enters**, **occupies**, and **leaves** the litter box?
@@ -22,7 +22,7 @@ This directly supports our Verification & Validation focus on:
 
 ---
 
-## 2) Connection to V&V Plan (Why this prototype matters)
+## 2) Connection to V&V Plan 
 
 This prototype is intentionally targeted at the V&V risk question:  
 > “What is the safest and most efficient way for our cleaning system to respond when a cat enters and leaves the litter box?”
@@ -34,7 +34,7 @@ V&V alignment categories:
 
 ---
 
-## 3) Hypotheses / Assumptions
+## 3) Hypotheses
 
 1. **Gate cleaning by cat presence**: The motor must never run while the cat is detected as present.  
 2. **Trigger cleaning after cat leaves**: After the cat leaves, a short delay helps prevent false triggers (cat returns immediately).  
@@ -43,7 +43,7 @@ V&V alignment categories:
 
 ---
 
-## 4) Prototype Build (Hardware + Wiring)
+## 4) Prototype Build
 
 ### 4.1 Bill of Materials
 - Adafruit Feather ESP32 V2
@@ -53,7 +53,7 @@ V&V alignment categories:
 - Breadboard + jumper wires
 - USB cable (data-capable)
 
-### 4.2 Wiring (as-built)
+### 4.2 Wiring 
 **Motor driver (L9110S, Motor B channel):**
 - ESP32 **A0 → B1A**
 - ESP32 **A1 → B2A**
@@ -175,30 +175,131 @@ Each trial follows:
 
 # Prototype 2 – TT Motor with PIR Motion Sensor
 **Team:** ECSE 395 Team 12  
-**Owner:** 
-**Date:**   
+**Owner:** Hanbing Wu
+**Date:**   3/16/2026
 **Prototype Type / Fidelity:** 
 
 ## 1) Purpose
-P
+The purpose of this prototype is to test whether a PIR motion sensor can reliably detect cat activity in the litter box area 
+and safely control the TT motor cleaning mechanism. The system should stop the motor whenever motion is detected and only begin cleaning after a period of inactivity. This prototype evaluates whether motion detection can be used as a safety mechanism to prevent the motor from operating while a cat is present.
+
 ---
 ## 2) Connection to Verification & Validation Plan 
+This prototype supports the safety requirement that the litter box cleaning motor must not operate when a cat is inside the litter box. The PIR sensor detects motion in the litter box area. If motion is detected, the motor stops immediately. If no motion is detected for a defined period (10 seconds during testing, but for 3 minutes in real life), the cleaning process begins. This prototype helps verify whether motion sensing can be used as a trigger to allow safe cleaning.
+
 ---
 ## 3) Hypotheses / Assumptions
+### Hypotheses
+- The PIR motion sensor can detect cat movement within 30cm.
+- The motor can be stopped immediately when motion is detected.
+- If no motion is detected for a certain time period, the system can safely begin the cleaning cycle.
+### Assumptions
+- Cat movement will trigger the PIR motion sensor.
+- The TT motor rotation can be approximated using a fixed time duration (simulating 10 rotations).
+- Motion detection can be used as an initial safety mechanism in the prototype.
+
 ---
 ## 4) Prototype Build
+### Hardware Components
+- ESP32 Feather V2  
+- PIR Motion Sensor  
+- TT Motor  
+- L9110S Motor Driver  
+- Breadboard and jumper wires
+- 9V battery
+- breadboard power module
+- battery wire
+
+  **Motor driver (L9110S, Motor B channel):**
+
+
+- ESP32 **A0 → B1A**
+- ESP32 **A1 → B2A**
+- TT motor leads → **Motor B output terminals**
+- Driver **GND → ESP32 GND** 
+
+- Driver **VCC → ESP32 VBUS (USB 5V)** 
+- ESP32 powered by USB from laptop
+
+**PIR motion sensor module:**
+- PIR **VCC → ESP32 VBUS (5V)**
+- PIR **GND → ESP32 GND**
+- PIR **OUT → ESP32 A2**
+
+  <img width="449" height="353" alt="aaefb9de1345f2b200e3beca218b89d" src="https://github.com/user-attachments/assets/bdf5025b-3b8e-4059-83b0-ba275d1c827a" />
+
 ---
 ## 5) Control Logic Implemented
+The system uses a **state machine** to control motor operation.
+### Control Flow
+1. Wait for cat activity detected by the PIR sensor.
+2. After motion is detected, the system waits until motion stops.
+3. If no motion is detected for **10 seconds**, the cleaning cycle begins.
+4. The motor runs **clockwise** for approximately **10 rotations**.
+5. The system checks for motion again.
+6. If no motion is detected, the motor runs **counter-clockwise** for **10 rotations**.
+7. If motion is detected at any time, the motor **stops immediately**.
+8. After one full cleaning cycle, the system waits for the **next cat activity event** before starting another cleaning cycle.
+
 ---
 ## 6) Test Plan
+
+### Test 1 – Motion Detection
+Introduce movement near the PIR sensor and verify that the sensor output changes.
+### Test 2 – Motor Interrupt Test
+Trigger motion while the motor is running and verify that the motor stops immediately.
+### Test 3 – Inactivity Timer
+Stop all motion near the sensor and confirm that the system waits 10 seconds before starting the cleaning cycle.
+### Test 4 – Cleaning Cycle Execution
+Verify that the motor runs clockwise and counter-clockwise as expected.
+
 ---
 ## 7) Evidence 
+
+- Serial monitor logs showing state transitions
+- Video recording of the motor stopping when motion is detected
+- Photos of the hardware prototype setup
+
+  ![5aec3f9f3aa8e859fb6a68f38d1e263](https://github.com/user-attachments/assets/a7ad989e-8fca-4eb5-998b-37c728ef3c2e)
+
+  https://drive.google.com/file/d/1IGy9qfVO9d2NC5iS9x_Wp-vByGQHRoAa/view?usp=drive_link
+  https://drive.google.com/file/d/1ViSXtDZpcQ6B9S4FActUbdBJVMCs-9Xc/view?usp=drive_link
+  https://drive.google.com/file/d/1dlMV5iLYzhcl5bx5OwFAuJV4ay_uai8v/view?usp=drive_link
+
 ---
 ## 8) Results 
+
+**1. Motion vs. Presence Detection**
+The PIR sensor detects motion rather than presence. If a cat remains stationary inside the litter box, the sensor may not detect it. This could allow the motor to start even when the cat is still present.
+
+**2. False Triggers**
+Environmental changes such as human movement, heat sources, or airflow may trigger the PIR sensor unintentionally. This may stop the motor even when no cat is present.
+
+**3. Motor Rotation Accuracy**
+The TT motor does not include an encoder, so the system approximates “10 rotations” using a fixed runtime. Variations in voltage, friction, or load may cause the motor to rotate more or fewer times than expected.
+
+**4. Sensor Detection Range**
+The PIR sensor has a wide detection range. Movement outside the intended litter box area may trigger the sensor, affecting system behavior.
+
 ---
 ## 9) Learning / Insights 
+
+1.the PIR motion sensor proved effective at detecting movement near the litter box area. The system was able to interrupt motor operation immediately when motion was detected, which demonstrates that motion-based safety interruption is feasible.
+
+2.the testing revealed an important limitation: PIR sensors detect **motion rather than presence**. If the cat remains stationary inside the litter box, the sensor may not detect it. This means that relying solely on PIR sensing may not provide sufficient safety for the cleaning mechanism.
+
+3.the prototype confirmed that the motor control logic implemented with a state machine works reliably. The system can transition between states such as waiting for motion, waiting for inactivity, and executing the cleaning cycle. This structure makes the control system easier to expand in future iterations.
+
+4. the experiment highlighted the importance of sensor placement and detection range. Because PIR sensors have a relatively wide detection area, movement outside the litter box region may trigger the sensor. This suggests that additional filtering or a more targeted sensing method may be required.
+
+Overall, this prototype successfully validated the basic motor control and motion interruption logic, while also revealing that additional sensing methods may be necessary to ensure safe operation of the automated litter box system.
+
+
 ---
 ## 10) How this prototype influenced the next design decision
+
+This prototype demonstrated that a PIR motion sensor can be used as a safety mechanism to detect activity near the litter box and interrupt motor operation. Based on this result, the PIR sensor can also be integrated into other system functions beyond the cleaning mechanism. One potential extension is to connect the PIR sensor to a **refilling sensor system** that monitors the litter level. In this design, the PIR sensor would ensure that the refilling process only occurs when there is no cat activity detected in the litter box area. The relationship between the PIR sensor and the refilling sensor is primarily a **safety coordination mechanism**. The PIR sensor verifies that no cat is present or moving near the litter box, while the system state ensures that the cleaning process is not currently running. Only when both conditions are satisfied can the automatic litter refilling process begin.This design approach helps prevent unsafe situations where litter might be dispensed while a cat is inside the litter box or while the cleaning motor is operating. By coordinating motion detection, cleaning operations, and litter level monitoring, the system can provide safer and more reliable automation for the litter box.
+
 ---
 
 
