@@ -442,7 +442,8 @@ https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson23_ultr
 - `motor-l9110s-tt/test/` : behavior evidence videos (`.mp4`)
 
 ### Prototype 2 structure
-- `
+- `Motion sensor/src/main.cpp` : contains code behavior
 
 ### Prototype 3 structure
+- `Ultrasonic/src/`: contains code behavior of circuit with and without LED
 
