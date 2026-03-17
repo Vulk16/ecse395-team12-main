@@ -314,7 +314,7 @@ This prototype demonstrated that a PIR motion sensor can be used as a safety mec
 **Team:** ECSE 395 Team 12  
 **Owner:** Pamela Marrero  
 **Date:** 2026-03-16  
-**Prototype Type / Fidelity:** 
+**Prototype Type / Fidelity: Low fidelity electronics + control logic prototype** 
 
 ## 1) Purpose
 **Primary question :**
@@ -338,7 +338,7 @@ How can we accurately detect waste levels to prevent overflow and notify the use
 * **Threshold Calibration:** A distance of $\leq 5\text{ cm}$ (Red) is sufficient to prevent overflow, while $> 10\text{ cm}$ (Green) indicates safe operating capacity.
 * **Signal Stability:** A 400ms polling delay is sufficient to prevent signal interference between ultrasonic pulses in a small compartment.
 
-## 4) Prototype Build (Hardware + Wiring)
+## 4) Prototype Build 
 ### 4.1 Bill of Materials
 * Adafruit Feather ESP32 V2 (or standard ESP32 Dev Board)
 * HC-SR04 Ultrasonic Distance Sensor
@@ -347,12 +347,18 @@ How can we accurately detect waste levels to prevent overflow and notify the use
 * Breadboard power module
 * Breadboard + jumper wires
 
+
 ### 4.2 Wiring 
+
+<img width="455" height="352" alt="Traffic" src="https://github.com/user-attachments/assets/2b67515c-5fee-47c4-981a-656fc853473c" />
+
 **Ultrasonic Sensor (HC-SR04):**
 * **VCC** → ESP32 USB/VBUS (5V preferred for HC-SR04 stability)
 * **Trig** → ESP32 Pin 25
 * **Echo** → ESP32 Pin 26
 * **GND** → ESP32 GND
+
+<img width="464" height="385" alt="Ultra" src="https://github.com/user-attachments/assets/2243bf29-0e8f-412a-8c89-69e4a724ec16" />
 
 **Traffic Light LEDs:**
 * **Red LED** → ESP32 Pin 13
@@ -382,7 +388,7 @@ $$\text{Distance (cm)} = \frac{\text{Pulse Width (}\mu\text{s)}}{58}$$
 
 ## 7) Results
 ### Observations
-* The HC-SR04 is highly directional. Must be placed 
+* The HC-SR04 is highly directional. Must be placed at the top of the waste compartment facing downwards towards the litter. 
 * The LEDs provided immediate visual confirmation, which will be useful for end-users.
 * Occasional yet short "jitter" in the distance reading was observed (e.g., 10.1cm jumping to 50+ cm), causing the LED to flicker between Green and Yellow.
 
