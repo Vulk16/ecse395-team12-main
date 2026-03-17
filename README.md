@@ -180,6 +180,7 @@ Each trial follows:
 **Prototype Type / Fidelity:** 
 
 ## 1) Purpose
+P
 ---
 ## 2) Connection to Verification & Validation Plan 
 ---
@@ -209,6 +210,8 @@ Each trial follows:
 **Prototype Type / Fidelity:** 
 
 ## 1) Purpose
+**Primary question:**
+What is the 
 ---
 ## 2) Connection to Verification & Validation Plan 
 ---
