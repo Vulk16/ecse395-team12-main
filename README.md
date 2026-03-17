@@ -307,8 +307,8 @@ Overall, this prototype successfully validated the basic motor control and motio
 This prototype demonstrated that a PIR motion sensor can be used as a safety mechanism to detect activity near the litter box and interrupt motor operation. Based on this result, the PIR sensor can also be integrated into other system functions beyond the cleaning mechanism. One potential extension is to connect the PIR sensor to a **refilling sensor system** that monitors the litter level. In this design, the PIR sensor would ensure that the refilling process only occurs when there is no cat activity detected in the litter box area. The relationship between the PIR sensor and the refilling sensor is primarily a **safety coordination mechanism**. The PIR sensor verifies that no cat is present or moving near the litter box, while the system state ensures that the cleaning process is not currently running. Only when both conditions are satisfied can the automatic litter refilling process begin.This design approach helps prevent unsafe situations where litter might be dispensed while a cat is inside the litter box or while the cleaning motor is operating. By coordinating motion detection, cleaning operations, and litter level monitoring, the system can provide safer and more reliable automation for the litter box.
 
 ---
-
-
+## 11) Sources used:
+https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson12_pir_motion.html 
 
 # Prototype 3 – Ultrasonic Sensor with Traffic Light LED
 **Team:** ECSE 395 Team 12  
@@ -346,7 +346,6 @@ How can we accurately detect waste levels to prevent overflow and notify the use
 * 9V Battery and Battery wire
 * Breadboard power module
 * Breadboard + jumper wires
-
 
 ### 4.2 Wiring 
 
@@ -403,7 +402,9 @@ $$\text{Distance (cm)} = \frac{\text{Pulse Width (}\mu\text{s)}}{58}$$
 
 ## 9) Next Steps
 * “Can we prevent the cleaning motor from cycling if there is no room for more waste?” 
-
+## 10) Sources used:
+https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson29_traffic_light_module.html 
+https://docs.sunfounder.com/projects/umsk/en/latest/03_esp32/esp32_lesson23_ultrasonic.html
 ## Repo Structure 
 
 - `src/main.cpp` : motor + IR integrated prototype code  
