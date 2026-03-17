@@ -1,5 +1,6 @@
 # ecse395-team12-main
 ECSE395 Team12 Cat Litter Box
+Hanbing Wu, Weikang Sun, Derek Chen, Pamela Marrero
 
 # Prototype 1 – Motor + Safety Gating (TT Motor + L9110S + ESP32 + IR Obstacle Sensor)
 
