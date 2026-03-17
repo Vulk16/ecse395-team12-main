@@ -317,30 +317,88 @@ This prototype demonstrated that a PIR motion sensor can be used as a safety mec
 **Prototype Type / Fidelity:** 
 
 ## 1) Purpose
-**Primary question:**
-What is the 
----
-## 2) Connection to Verification & Validation Plan 
----
-## 3) Hypotheses / Assumptions
----
-## 4) Prototype Build
----
-## 5) Control Logic Implemented
----
-## 6) Test Plan
----
-## 7) Evidence 
----
-## 8) Results 
----
-## 9) Learning / Insights 
----
-## 10) How this prototype influenced the next design decision
----
+**Primary question :**
+How can we accurately detect waste levels to prevent overflow and notify the user when the waste compartment requires maintenance?
 
----
-## Repo Structure (for the grader / reader)
+**This directly supports our Verification & Validation focus on:**
+* **TS.16 Fill Level Accuracy:** Can the HC-SR04 reliably distinguish between "No cleaning needed," "Cleaning recommended," and "Clean Immediately" states in the waste compartment.
+* **User Feedback:** Does the "Traffic Light" LED logic provide clear, real-time and status updates that align with physical capacity of the waste tray? 
+* **System Reliability:** Avoiding "false full" readings caused by irregular waste piles or sensor noise.
+
+## 2) Connection to Verification & Validation Plan 
+* “How does the system communicate to the user that the bin is full?”
+
+**V&V alignment categories:**
+* **Functional testing:** Confirms the ultrasonic trigger/echo cycle translates correctly to distance in centimeters.
+* **Safety/Hygiene:** Provides the logic needed to alert the user when litter waste needs to be removed
+* **Calibration:** Establishes the physical height thresholds for the specific bin geometry used.
+
+## 3) Hypotheses / Assumptions
+* **Ultrasonic Reliability:** The sensor requires a clear "line of sight" to the waste; irregular surfaces (litter clumps) might cause varying reflections, requiring software smoothing.
+* **Threshold Calibration:** A distance of $\leq 5\text{ cm}$ (Red) is sufficient to prevent overflow, while $> 10\text{ cm}$ (Green) indicates safe operating capacity.
+* **Signal Stability:** A 400ms polling delay is sufficient to prevent signal interference between ultrasonic pulses in a small compartment.
+
+## 4) Prototype Build (Hardware + Wiring)
+### 4.1 Bill of Materials
+* Adafruit Feather ESP32 V2 (or standard ESP32 Dev Board)
+* HC-SR04 Ultrasonic Distance Sensor
+* LEDs: Traffic Light LED with Red, Yellow, and Green
+* 9V Battery and Battery wire
+* Breadboard power module
+* Breadboard + jumper wires
+
+### 4.2 Wiring 
+**Ultrasonic Sensor (HC-SR04):**
+* **VCC** → ESP32 USB/VBUS (5V preferred for HC-SR04 stability)
+* **Trig** → ESP32 Pin 25
+* **Echo** → ESP32 Pin 26
+* **GND** → ESP32 GND
+
+**Traffic Light LEDs:**
+* **Red LED** → ESP32 Pin 13
+* **Yellow LED** → ESP32 Pin 12
+* **Green LED** → ESP32 Pin 14
+
+## 5) Control Logic Implemented (What the code does)
+### 5.1 Distance Calculation
+The system triggers a $10\mu s$ pulse. The distance is calculated based on the speed of sound:
+$$\text{Distance (cm)} = \frac{\text{Pulse Width (}\mu\text{s)}}{58}$$
+
+### 5.2 Threshold Logic
+* **RED (Full):** Distance $\leq 5\text{ cm}$. The bin is at capacity.
+* **YELLOW (Warning):** Distance $5\text{ cm} < d \leq 10\text{ cm}$. The bin is nearing capacity.
+* **GREEN (OK):** Distance $> 10\text{ cm}$. Sufficient space remains.
+
+## 6) Test Plan 
+### 6.1 Setup
+* Hold Ultrasonic sensor at approximately from 15 cm height gradually to 0 cm from a table.
+* Using a hand test different distances
+* Monitor Serial output at 115200 baud to verify distance accuracy.
+
+### 6.2 Procedure
+1.  **Empty Bin:** Ensure Green LED is lit when the "waste" is $> 10\text{ cm}$ away.
+2.  **Fill Simulation:** Slowly move the hand toward the sensor. Verify the transition to Yellow at 10cm and Red at 5cm.
+3.  **Error Handling:** Move the object too close ($< 2\text{ cm}$) or out of range to see how the system handles "0" or invalid readings.
+
+## 7) Results
+### Observations
+* The HC-SR04 is highly directional. Must be placed 
+* The LEDs provided immediate visual confirmation, which will be useful for end-users.
+* Occasional yet short "jitter" in the distance reading was observed (e.g., 10.1cm jumping to 50+ cm), causing the LED to flicker between Green and Yellow.
+
+### Pass/Fail Summary
+* Accurate CM reading (within +/- 1 cm): **PASS**
+* LED state transitions at correct thresholds: **PASS**
+
+## 8) Learning / Insights
+* **Smoothing is necessary:** For future iterations should use a "moving average" of 5–10 readings to prevent LED flickering at threshold boundaries.
+* **Environment Matters:** Dust from cat litter may settle on the ultrasonic transducers over time; the mechanical design should include a protective shroud or easy-clean access.
+* **Integration:** The "Red" state must be the determining logic for when the motor subsystem operates as well to prevent the filter from forcing more waste into a full bin.
+
+## 9) Next Steps
+* “Can we prevent the cleaning motor from cycling if there is no room for more waste?” 
+
+## Repo Structure 
 
 - `src/main.cpp` : motor + IR integrated prototype code  
 - `hardware/` : wiring + sensor placement photos  
