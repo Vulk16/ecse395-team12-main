@@ -260,11 +260,15 @@ Verify that the motor runs clockwise and counter-clockwise as expected.
 - Video recording of the motor stopping when motion is detected
 - Photos of the hardware prototype setup
 
-  ![5aec3f9f3aa8e859fb6a68f38d1e263](https://github.com/user-attachments/assets/a7ad989e-8fca-4eb5-998b-37c728ef3c2e)
+Figure shows wiring
+   ![5aec3f9f3aa8e859fb6a68f38d1e263](https://github.com/user-attachments/assets/a7ad989e-8fca-4eb5-998b-37c728ef3c2e)
 
+Video 1 shows how monitor works during cat detection process
   https://drive.google.com/file/d/1IGy9qfVO9d2NC5iS9x_Wp-vByGQHRoAa/view?usp=drive_link
+Video 2 shows how serial monitor and TT Motor works
   https://drive.google.com/file/d/1ViSXtDZpcQ6B9S4FActUbdBJVMCs-9Xc/view?usp=drive_link
-  https://drive.google.com/file/d/1dlMV5iLYzhcl5bx5OwFAuJV4ay_uai8v/view?usp=drive_link
+Video 3 shows how PIR and TT Motor cooprate and states transitions on the monitor
+  https://drive.google.com/file/d/1gYcruBor-WW7cueBooxxviA5RqZq9Gf5/view?usp=drive_link
 
 ---
 ## 8) Results 
