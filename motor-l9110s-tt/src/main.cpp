@@ -1,3 +1,4 @@
+/*
 #if __has_include(<Arduino.h>)
 #include <Arduino.h>
 #else
@@ -72,7 +73,7 @@ struct SerialClass {
   - r : reset from STOPPED back to IDLE
   - d : toggle trigger edge (detect vs leave)
   - l : toggle active logic (active-low vs active-high)
-*/
+
 
 //
 // -------------------- Pin Mapping --------------------
@@ -163,8 +164,11 @@ static void heartbeat() {
   uint32_t now = millis();
   if (now - g_lastAliveMs >= 1000) {
     g_lastAliveMs = now;
-    Serial.print("Alive: ");
-    Serial.println(now / 1000);
+    int b = now / 1000;
+
+    Serial.print("Alive:");
+    Serial.print(b);
+    Serial.println(' ');
   }
 }
 
@@ -290,7 +294,7 @@ static bool irEdgeEventDebounced(bool obstacleNow) {
 // -------------------- Serial UI --------------------
 //
 static void printHelp() {
-  Serial.println();
+  Serial.println(' ');
   Serial.println("=== Cat Litterbox Motor Prototype (IR + L9110S) ===");
   Serial.println("h : help");
   Serial.println("p : print status");
@@ -374,7 +378,7 @@ void setup() {
   delay(200);
 
   // [ADDED] Boot banner for monitor clarity
-  Serial.println();
+  Serial.println(' ');
   Serial.println("[BOOT] TT Motor + L9110S + IR Obstacle Sensor (Safety Gating Prototype)");
   Serial.println("[BOOT] Use 'h' for help. Monitor baud = 115200.");
 
@@ -541,3 +545,4 @@ void loop() {
 
   delay(5);
 }
+  */
