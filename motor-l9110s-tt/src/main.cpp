@@ -1,4 +1,3 @@
-/*
 #if __has_include(<Arduino.h>)
 #include <Arduino.h>
 #else
@@ -29,14 +28,24 @@ struct SerialClass {
   void begin(int) {}
   int available() { return 0; }
   int read() { return -1; }
+
   void print(const char*) {}
   void println(const char*) {}
-  void print(unsigned long v) { (void)v; }
-  void println(unsigned long v) { (void)v; }
-  void print(bool b) { (void)b; }
-  void println(bool b) { (void)b; }
+
+  void print(char c) { (void)c; }
+  void println(char c) { (void)c; }
+
   void print(int v) { (void)v; }
   void println(int v) { (void)v; }
+
+  void print(unsigned int v) { (void)v; }
+  void println(unsigned int v) { (void)v; }
+
+  void print(unsigned long v) { (void)v; }
+  void println(unsigned long v) { (void)v; }
+
+  void print(bool b) { (void)b; }
+  void println(bool b) { (void)b; }
 } Serial;
 #endif
 
@@ -73,7 +82,7 @@ struct SerialClass {
   - r : reset from STOPPED back to IDLE
   - d : toggle trigger edge (detect vs leave)
   - l : toggle active logic (active-low vs active-high)
-
+*/
 
 //
 // -------------------- Pin Mapping --------------------
@@ -101,11 +110,11 @@ static const uint32_t RAMP_STEP_DELAY_MS = 8;    // ramp smoothness
 //
 // -------------------- Timing Parameters --------------------
 //
-static const uint32_t CLEAN_RUN_MS = 3500;        // cleaning action duration
-static const uint32_t POST_STOP_MS = 800;         // pause after motor stops
-static const uint32_t COOLDOWN_MS = 3UL * 60UL * 1000UL; // 3 minutes
-static const uint32_t LEAVE_CONFIRM_MS = 1500;    // wait after "cat leaves" before cleaning
-static const uint32_t DEBOUNCE_MS = 80;           // debounce for IR transitions
+static const uint32_t CLEAN_RUN_MS = 3500;                 // cleaning action duration
+static const uint32_t POST_STOP_MS = 800;                  // pause after motor stops
+static const uint32_t COOLDOWN_MS = 3UL * 60UL * 1000UL;   // 3 minutes
+static const uint32_t LEAVE_CONFIRM_MS = 1500;             // wait after "cat leaves" before cleaning
+static const uint32_t DEBOUNCE_MS = 80;                    // debounce for IR transitions
 
 //
 // -------------------- IR Logic Parameters --------------------
@@ -124,12 +133,12 @@ static bool TRIGGER_ON_DETECT = false;
 // -------------------- State Machine --------------------
 //
 enum class SysState {
-  IDLE,            // waiting for cat presence/leave event
-  CAT_PRESENT,     // obstacle currently detected
-  WAIT_LEAVE_DELAY,// cat left, waiting LEAVE_CONFIRM_MS before cleaning
-  CLEANING,        // run motor cycle
-  COOLDOWN,        // cooldown after cleaning
-  STOPPED_MANUAL   // manual emergency stop (latched)
+  IDLE,             // waiting for cat presence/leave event
+  CAT_PRESENT,      // obstacle currently detected
+  WAIT_LEAVE_DELAY, // cat left, waiting LEAVE_CONFIRM_MS before cleaning
+  CLEANING,         // run motor cycle
+  COOLDOWN,         // cooldown after cleaning
+  STOPPED_MANUAL    // manual emergency stop (latched)
 };
 
 static SysState state = SysState::IDLE;
@@ -139,33 +148,27 @@ static uint32_t t_last_clean = 0;
 static uint32_t t_last_edge_ms = 0;
 
 //
-// -------------------- [ADDED] Serial Monitoring (non-invasive) --------------------
-//
-// These additions do NOT change control logic. They only print helpful debugging info.
+// -------------------- Serial Monitoring --------------------
 //
 static uint32_t g_lastAliveMs = 0;
 static bool g_lastObstacle = false;
 static bool g_hasLastObstacle = false;
 
 static void logStateChange(const char* nextState) {
-  // English comment: Prints every state transition for debugging.
   Serial.print("[STATE] -> ");
   Serial.println(nextState);
 }
 
 static void logMotorAction(const char* msg) {
-  // English comment: Prints motor action messages to confirm execution.
   Serial.print("[MOTOR] ");
   Serial.println(msg);
 }
 
 static void heartbeat() {
-  // English comment: Prints a heartbeat every 1 second so we know loop() is alive.
   uint32_t now = millis();
   if (now - g_lastAliveMs >= 1000) {
     g_lastAliveMs = now;
-    int b = now / 1000;
-
+    unsigned long b = now / 1000UL;
     Serial.print("Alive:");
     Serial.print(b);
     Serial.println(' ');
@@ -173,7 +176,6 @@ static void heartbeat() {
 }
 
 static void logIRChangeIfAny(bool obstacleNow) {
-  // English comment: Logs IR transitions (BLOCKED/CLEAR) only when it changes.
   if (!g_hasLastObstacle) {
     g_hasLastObstacle = true;
     g_lastObstacle = obstacleNow;
@@ -181,6 +183,7 @@ static void logIRChangeIfAny(bool obstacleNow) {
     Serial.println(obstacleNow ? "BLOCKED" : "CLEAR");
     return;
   }
+
   if (obstacleNow != g_lastObstacle) {
     g_lastObstacle = obstacleNow;
     Serial.print("[IR] change -> ");
@@ -213,7 +216,6 @@ static void motorReverseDuty(uint8_t duty) {
 }
 
 static void motorRampForward(uint8_t dutyTarget) {
-  // Soft-start forward
   logMotorAction("Soft-start (ramp up)");
   for (uint16_t d = 0; d <= dutyTarget; d += RAMP_STEP) {
     motorForwardDuty((uint8_t)d);
@@ -223,7 +225,6 @@ static void motorRampForward(uint8_t dutyTarget) {
 }
 
 static void motorRampStopFrom(uint8_t dutyStart) {
-  // Soft-stop forward direction ramp down
   logMotorAction("Soft-stop (ramp down)");
   for (int d = dutyStart; d >= 0; d -= (int)RAMP_STEP) {
     motorForwardDuty((uint8_t)d);
@@ -237,7 +238,6 @@ static void setState(SysState s) {
   state = s;
   t_state_enter = millis();
 
-  // [ADDED] Log transitions without changing behavior
   logStateChange(
     (s == SysState::IDLE) ? "IDLE" :
     (s == SysState::CAT_PRESENT) ? "CAT_PRESENT" :
@@ -252,21 +252,14 @@ static void setState(SysState s) {
 // -------------------- IR Input Helpers --------------------
 //
 static bool irObstacleDetectedRaw() {
-  // Returns true if IR sensor indicates "obstacle detected"
   int v = digitalRead(PIN_IR_OUT);
-  if (IR_ACTIVE_LOW) {
-    return (v == LOW);
-  } else {
-    return (v == HIGH);
-  }
+  return IR_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
 }
 
 static bool irEdgeEventDebounced(bool obstacleNow) {
-  // Debounced edge detection on obstacle state
   static bool lastObstacle = false;
   uint32_t now = millis();
 
-  // debounce window
   if ((now - t_last_edge_ms) < DEBOUNCE_MS) {
     lastObstacle = obstacleNow;
     return false;
@@ -275,10 +268,8 @@ static bool irEdgeEventDebounced(bool obstacleNow) {
   bool event = false;
 
   if (TRIGGER_ON_DETECT) {
-    // event on becoming detected
     if (obstacleNow && !lastObstacle) event = true;
   } else {
-    // event on becoming NOT detected (leave)
     if (!obstacleNow && lastObstacle) event = true;
   }
 
@@ -328,41 +319,39 @@ static void printStatus() {
   Serial.print(" | obstacleDetected=");
   Serial.print(irObstacleDetectedRaw() ? "true" : "false");
   Serial.print(" | lastCleanAgo(ms)=");
-  Serial.println(millis() - t_last_clean);
+  Serial.println((unsigned long)(millis() - t_last_clean));
 }
 
 static void handleSerial() {
   while (Serial.available()) {
-    char c = Serial.read();
+    char c = (char)Serial.read();
     if (c == '\n' || c == '\r') continue;
 
-    if (c == 'h') printHelp();
-    else if (c == 'p') printStatus();
-    else if (c == 's') {
+    if (c == 'h') {
+      printHelp();
+    } else if (c == 'p') {
+      printStatus();
+    } else if (c == 's') {
       Serial.println("Manual STOP (latched)");
       logMotorAction("Manual STOP requested");
       motorStopHard();
       setState(SysState::STOPPED_MANUAL);
-    }
-    else if (c == 'r') {
+    } else if (c == 'r') {
       Serial.println("Reset -> IDLE");
       logMotorAction("Manual reset requested");
       motorStopHard();
       setState(SysState::IDLE);
-    }
-    else if (c == 'c') {
+    } else if (c == 'c') {
       Serial.println("Manual CLEAN start");
       logMotorAction("Manual CLEAN requested");
       if (state != SysState::STOPPED_MANUAL) {
         setState(SysState::CLEANING);
       }
-    }
-    else if (c == 'd') {
+    } else if (c == 'd') {
       TRIGGER_ON_DETECT = !TRIGGER_ON_DETECT;
       Serial.print("TRIGGER_ON_DETECT toggled -> ");
       Serial.println(TRIGGER_ON_DETECT ? "true (detect event)" : "false (leave event)");
-    }
-    else if (c == 'l') {
+    } else if (c == 'l') {
       IR_ACTIVE_LOW = !IR_ACTIVE_LOW;
       Serial.print("IR_ACTIVE_LOW toggled -> ");
       Serial.println(IR_ACTIVE_LOW ? "true (active LOW)" : "false (active HIGH)");
@@ -377,7 +366,6 @@ void setup() {
   Serial.begin(115200);
   delay(200);
 
-  // [ADDED] Boot banner for monitor clarity
   Serial.println(' ');
   Serial.println("[BOOT] TT Motor + L9110S + IR Obstacle Sensor (Safety Gating Prototype)");
   Serial.println("[BOOT] Use 'h' for help. Monitor baud = 115200.");
@@ -388,7 +376,7 @@ void setup() {
   pinMode(PIN_LED, OUTPUT);
   digitalWrite(PIN_LED, LOW);
 
-  pinMode(PIN_IR_OUT, INPUT);  // IR module OUT is a digital signal
+  pinMode(PIN_IR_OUT, INPUT);
   pinMode(PIN_IN1, OUTPUT);
   pinMode(PIN_IN2, OUTPUT);
 
@@ -403,19 +391,14 @@ void setup() {
   setState(SysState::IDLE);
   printHelp();
   printStatus();
-
-  // [ADDED] Log initial IR state
   logIRChangeIfAny(irObstacleDetectedRaw());
 }
 
 void loop() {
   handleSerial();
-
-  // [ADDED] Heartbeat so you always see it's running
   heartbeat();
 
   if (state == SysState::STOPPED_MANUAL) {
-    // Latched stop: do nothing until 'r'
     digitalWrite(PIN_LED, LOW);
     motorStopHard();
     delay(10);
@@ -425,20 +408,13 @@ void loop() {
   uint32_t now = millis();
   bool obstacleNow = irObstacleDetectedRaw();
 
-  // [ADDED] Log IR changes (BLOCKED/CLEAR) without altering logic
   logIRChangeIfAny(obstacleNow);
 
-  // Basic presence tracking
   if (obstacleNow && state == SysState::IDLE) {
     setState(SysState::CAT_PRESENT);
     Serial.println("IR: obstacle detected -> CAT_PRESENT");
   }
-  if (obstacleNow && state == SysState::COOLDOWN) {
-    // still cooldown but cat present
-    // keep state, do nothing
-  }
 
-  // Edge event (detect or leave), debounced
   bool edgeEvent = irEdgeEventDebounced(obstacleNow);
   if (edgeEvent) {
     if (TRIGGER_ON_DETECT) {
@@ -451,53 +427,44 @@ void loop() {
   switch (state) {
     case SysState::IDLE: {
       digitalWrite(PIN_LED, LOW);
-      // Waiting for presence
       break;
     }
 
     case SysState::CAT_PRESENT: {
-      // Cat is present: do not clean
       digitalWrite(PIN_LED, HIGH);
 
-      // If we are triggering on LEAVE, watch for leave event to start delay
       if (!TRIGGER_ON_DETECT && edgeEvent) {
         Serial.println("Cat left -> starting leave-confirm delay");
         setState(SysState::WAIT_LEAVE_DELAY);
       }
-
       break;
     }
 
     case SysState::WAIT_LEAVE_DELAY: {
       digitalWrite(PIN_LED, HIGH);
 
-      // If cat comes back during the delay, cancel cleaning
       if (obstacleNow) {
         Serial.println("Cat returned during delay -> back to CAT_PRESENT");
         setState(SysState::CAT_PRESENT);
         break;
       }
 
-      // Cooldown check before cleaning
       if (t_last_clean != 0 && (now - t_last_clean) < COOLDOWN_MS) {
         Serial.println("Cooldown active -> skipping cleaning");
         setState(SysState::COOLDOWN);
         break;
       }
 
-      // Wait a short time to ensure cat is truly away
       if ((now - t_state_enter) >= LEAVE_CONFIRM_MS) {
         Serial.println("Leave confirmed -> start CLEANING");
         setState(SysState::CLEANING);
       }
-
       break;
     }
 
     case SysState::CLEANING: {
       digitalWrite(PIN_LED, HIGH);
 
-      // If cat appears again, immediately stop (safety)
       if (obstacleNow) {
         Serial.println("Safety: obstacle detected during cleaning -> STOP");
         logMotorAction("Safety stop triggered by IR during cleaning");
@@ -506,7 +473,6 @@ void loop() {
         break;
       }
 
-      // Perform one cleaning cycle (soft start -> run -> soft stop)
       logMotorAction("Cleaning cycle begin");
       motorRampForward(DUTY_MAX);
       logMotorAction("Run at DUTY_MAX");
@@ -525,24 +491,17 @@ void loop() {
     case SysState::COOLDOWN: {
       digitalWrite(PIN_LED, LOW);
 
-      // If cat is present, just remain calm in cooldown
-      if (obstacleNow) {
-        // optional: keep track of presence
-      }
-
-      // End cooldown
       if (t_last_clean != 0 && (now - t_last_clean) >= COOLDOWN_MS) {
         Serial.println("Cooldown finished -> IDLE");
         setState(SysState::IDLE);
       }
-
       break;
     }
 
+    case SysState::STOPPED_MANUAL:
     default:
       break;
   }
 
   delay(5);
 }
-  */
