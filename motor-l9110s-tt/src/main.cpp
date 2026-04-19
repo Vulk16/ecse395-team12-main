@@ -20,8 +20,6 @@ inline void digitalWrite(int, int) {}
 inline int digitalRead(int) { return LOW; }
 inline unsigned long millis() { return 0UL; }
 inline void delay(unsigned long) {}
-inline void delayMicroseconds(unsigned int) {}
-inline unsigned long pulseIn(int, int, unsigned long = 1000000UL) { return 0UL; }
 inline void ledcSetup(int, int, int) {}
 inline void ledcAttachPin(int, int) {}
 inline void ledcWrite(int, int) {}
@@ -46,100 +44,101 @@ struct SerialClass {
   void print(unsigned long v) { (void)v; }
   void println(unsigned long v) { (void)v; }
 
-  void print(float v) { (void)v; }
-  void println(float v) { (void)v; }
-
   void print(bool b) { (void)b; }
   void println(bool b) { (void)b; }
 } Serial;
 #endif
 
 /*
-  ============================================================
-  FINAL MERGED MAIN.CPP
-  ============================================================
+  Cat Litterbox Prototype - Motor Subsystem (TT Motor + L9110S + IR Obstacle Sensor)
+  Board: Adafruit Feather ESP32 V2
+  Framework: Arduino (PlatformIO)
 
-  This file merges:
+  ---------- Hardware wiring ----------
+  Motor driver (L9110S, Motor-B):
+  - ESP32 A0 -> B1A
+  - ESP32 A1 -> B2A (or the other Motor-B input pin on your board)
+  - TT motor -> MOTOR B terminals
+  - Driver VCC -> VBUS (USB 5V recommended)
+  - Driver GND -> ESP32 GND (common ground REQUIRED)
 
-  1) Original motor subsystem code
-     - TT motor + L9110S
-     - IR obstacle sensor
-     - safety gating / state machine
-     - serial commands
-     - debug heartbeat and state prints
+  IR Obstacle Module (SunFounder):
+  - VCC -> ESP32 3V (3.3V)
+  - GND -> ESP32 GND
+  - OUT -> ESP32 A2
 
-  2) Ultrasonic subsystem code
-     - HC-SR04 distance measurement
-     - serial distance print
+  ---------- Prototype logic ----------
+  We do NOT clean while the cat is present.
+  We clean AFTER the cat leaves (IR no longer detects obstacle),
+  plus a short delay (leave-confirm delay), then run one cleaning cycle.
+  A cooldown prevents repeated cleaning too frequently.
 
-  3) Ultrasonic LED traffic-light subsystem
-     - red / yellow / green indication
-     - level thresholds for waste / litter status
-
-  ------------------------------------------------------------
-  Board:
-  - Adafruit Feather ESP32 V2 / ESP32 Development Board
-
-  Original motor subsystem wiring:
-  - A0 -> L9110S input 1
-  - A1 -> L9110S input 2
-  - A2 -> IR obstacle OUT
-  - LED_BUILTIN -> original status LED
-
-  Ultrasonic wiring:
-  - trigPin = 25
-  - echoPin = 26
-
-  Traffic-light LED pins:
-  - redPin    = 27   (changed from 13 to avoid conflict with LED_BUILTIN)
-  - yellowPin = 12
-  - greenPin  = 14
+  ---------- Manual controls ----------
+  Serial commands:
+  - h : help menu
+  - p : print status
+  - c : force cleaning now
+  - s : emergency stop (locks in STOPPED state)
+  - r : reset from STOPPED back to IDLE
+  - d : toggle trigger edge (detect vs leave)
+  - l : toggle active logic (active-low vs active-high)
 */
 
-// ============================================================
-// -------------------- MOTOR / IR SUBSYSTEM -------------------
-// ============================================================
-
+//
 // -------------------- Pin Mapping --------------------
+//
 static const int PIN_IN1 = A0;      // L9110S Motor-B input 1
 static const int PIN_IN2 = A1;      // L9110S Motor-B input 2
 static const int PIN_IR_OUT = A2;   // IR obstacle module digital output
-static const int PIN_STATUS_LED = LED_BUILTIN;
+static const int PIN_LED = LED_BUILTIN;
 
+//
 // -------------------- PWM (LEDC) Setup --------------------
+//
 static const int CH1 = 0;
 static const int CH2 = 1;
 static const int PWM_RES_BITS = 8;       // 0..255
 static const int PWM_FREQ_HZ = 20000;    // quiet PWM
 
+//
 // -------------------- Motor Parameters --------------------
+//
 static const uint8_t DUTY_MAX = 220;             // adjust for torque vs noise (0..255)
 static const uint8_t RAMP_STEP = 5;              // duty increment/decrement per step
 static const uint32_t RAMP_STEP_DELAY_MS = 8;    // ramp smoothness
 
+//
 // -------------------- Timing Parameters --------------------
-static const uint32_t CLEAN_RUN_MS = 3500;                   // cleaning action duration
-static const uint32_t POST_STOP_MS = 800;                   // pause after motor stops
-static const uint32_t COOLDOWN_MS = 3UL * 60UL * 1000UL;    // 3 minutes
-static const uint32_t LEAVE_CONFIRM_MS = 1500;              // wait after "cat leaves" before cleaning
-static const uint32_t DEBOUNCE_MS = 80;                     // debounce for IR transitions
+//
+static const uint32_t CLEAN_RUN_MS = 3500;                 // cleaning action duration
+static const uint32_t POST_STOP_MS = 800;                  // pause after motor stops
+static const uint32_t COOLDOWN_MS = 3UL * 60UL * 1000UL;   // 3 minutes
+static const uint32_t LEAVE_CONFIRM_MS = 1500;             // wait after "cat leaves" before cleaning
+static const uint32_t DEBOUNCE_MS = 80;                    // debounce for IR transitions
 
+//
 // -------------------- IR Logic Parameters --------------------
+//
+// Many IR obstacle modules are ACTIVE-LOW when an obstacle is detected (OUT=LOW).
+// If your module is opposite, you can toggle at runtime via serial command 'l'.
+//
 static bool IR_ACTIVE_LOW = true;
 
 // Trigger policy:
-// false -> event fires when obstacle is no longer detected (cat leaves) [recommended]
-// true  -> event fires when obstacle is detected (cat arrives)
+// If TRIGGER_ON_DETECT = false: event fires when obstacle is no longer detected (cat leaves) -> recommended.
+// If true: event fires when obstacle is detected (cat arrives).
 static bool TRIGGER_ON_DETECT = false;
 
+//
 // -------------------- State Machine --------------------
+//
 enum class SysState {
-  IDLE,
-  CAT_PRESENT,
-  WAIT_LEAVE_DELAY,
-  CLEANING,
-  COOLDOWN,
-  STOPPED_MANUAL
+  IDLE,             // waiting for cat presence/leave event
+  CAT_PRESENT,      // obstacle currently detected
+  WAIT_LEAVE_DELAY, // cat left, waiting LEAVE_CONFIRM_MS before cleaning
+  CLEANING,         // run motor cycle
+  COOLDOWN,         // cooldown after cleaning
+  STOPPED_MANUAL    // manual emergency stop (latched)
 };
 
 static SysState state = SysState::IDLE;
@@ -148,74 +147,12 @@ static uint32_t t_state_enter = 0;
 static uint32_t t_last_clean = 0;
 static uint32_t t_last_edge_ms = 0;
 
+//
 // -------------------- Serial Monitoring --------------------
+//
 static uint32_t g_lastAliveMs = 0;
 static bool g_lastObstacle = false;
 static bool g_hasLastObstacle = false;
-
-// ============================================================
-// -------------------- ULTRASONIC SUBSYSTEM -------------------
-// ============================================================
-
-// -------------------- Ultrasonic Pins --------------------
-static const int trigPin = 25;
-static const int echoPin = 26;
-
-// -------------------- Traffic Light Pins --------------------
-// NOTE: redPin changed from 13 -> 27 to avoid conflict with LED_BUILTIN
-static const int redPin = 27;
-static const int yellowPin = 12;
-static const int greenPin = 14;
-
-// -------------------- Ultrasonic Thresholds (cm) --------------------
-static const float redThreshold = 5.0f;       // distance <= 5 cm -> RED
-static const float yellowThreshold = 10.0f;   // 5 < distance <= 10 cm -> YELLOW
-
-// -------------------- Ultrasonic Sampling --------------------
-static const int ULTRA_NUM_SAMPLES = 5;
-static const unsigned long ULTRA_TIMEOUT_US = 30000UL;
-static const unsigned long ULTRA_SAMPLE_GAP_MS = 20;
-static const unsigned long ULTRA_UPDATE_PERIOD_MS = 500;
-
-static float g_lastDistanceCm = -1.0f;
-static uint32_t g_lastUltrasonicUpdateMs = 0;
-
-// ============================================================
-// -------------------- FORWARD DECLARATIONS -------------------
-// ============================================================
-
-// Motor / IR helpers
-static void logStateChange(const char* nextState);
-static void logMotorAction(const char* msg);
-static void heartbeat();
-static void logIRChangeIfAny(bool obstacleNow);
-
-static void motorStopHard();
-static void motorForwardDuty(uint8_t duty);
-static void motorReverseDuty(uint8_t duty);
-static void motorRampForward(uint8_t dutyTarget);
-static void motorRampStopFrom(uint8_t dutyStart);
-
-static void setState(SysState s);
-static bool irObstacleDetectedRaw();
-static bool irEdgeEventDebounced(bool obstacleNow);
-
-static void printHelp();
-static const char* stateName(SysState s);
-static void printStatus();
-static void handleSerial();
-
-// Ultrasonic helpers
-static float readDistanceSingle();
-static float readDistanceAveraged(int samples);
-static void setTrafficLight(bool redOn, bool yellowOn, bool greenOn);
-static void updateTrafficLightFromDistance(float distance);
-static const char* levelNameFromDistance(float distance);
-static void updateUltrasonicMonitor(bool forcePrint = false);
-
-// ============================================================
-// -------------------- MOTOR / IR FUNCTIONS -------------------
-// ============================================================
 
 static void logStateChange(const char* nextState) {
   Serial.print("[STATE] -> ");
@@ -232,7 +169,6 @@ static void heartbeat() {
   if (now - g_lastAliveMs >= 1000) {
     g_lastAliveMs = now;
     unsigned long b = now / 1000UL;
-
     Serial.print("Alive:");
     Serial.print(b);
     Serial.println(' ');
@@ -255,6 +191,9 @@ static void logIRChangeIfAny(bool obstacleNow) {
   }
 }
 
+//
+// -------------------- Motor Helper Functions --------------------
+//
 static void motorStopHard() {
   ledcWrite(CH1, 0);
   ledcWrite(CH2, 0);
@@ -263,12 +202,14 @@ static void motorStopHard() {
 }
 
 static void motorForwardDuty(uint8_t duty) {
+  // Forward: IN1 PWM, IN2 LOW
   ledcWrite(CH2, 0);
   digitalWrite(PIN_IN2, LOW);
   ledcWrite(CH1, duty);
 }
 
 static void motorReverseDuty(uint8_t duty) {
+  // Reverse: IN1 LOW, IN2 PWM
   ledcWrite(CH1, 0);
   digitalWrite(PIN_IN1, LOW);
   ledcWrite(CH2, duty);
@@ -307,6 +248,9 @@ static void setState(SysState s) {
   );
 }
 
+//
+// -------------------- IR Input Helpers --------------------
+//
 static bool irObstacleDetectedRaw() {
   int v = digitalRead(PIN_IR_OUT);
   return IR_ACTIVE_LOW ? (v == LOW) : (v == HIGH);
@@ -337,19 +281,20 @@ static bool irEdgeEventDebounced(bool obstacleNow) {
   return event;
 }
 
+//
+// -------------------- Serial UI --------------------
+//
 static void printHelp() {
   Serial.println(' ');
-  Serial.println("=== Cat Litterbox Final Prototype ===");
-  Serial.println("Motor / IR commands:");
+  Serial.println("=== Cat Litterbox Motor Prototype (IR + L9110S) ===");
   Serial.println("h : help");
-  Serial.println("p : print full status");
+  Serial.println("p : print status");
   Serial.println("c : force cleaning now");
   Serial.println("s : emergency stop (latched)");
   Serial.println("r : reset from STOPPED back to IDLE");
   Serial.println("d : toggle trigger edge (detect <-> leave)");
   Serial.println("l : toggle IR active logic (active-low <-> active-high)");
-  Serial.println("u : print ultrasonic reading now");
-  Serial.println("=====================================");
+  Serial.println("===================================================");
 }
 
 static const char* stateName(SysState s) {
@@ -365,30 +310,16 @@ static const char* stateName(SysState s) {
 }
 
 static void printStatus() {
-  Serial.println("--------------- FULL STATUS ---------------");
-
-  Serial.print("MotorState=");
-  Serial.println(stateName(state));
-
-  Serial.print("IR_ACTIVE_LOW=");
-  Serial.println(IR_ACTIVE_LOW ? "true" : "false");
-
-  Serial.print("TRIGGER_ON_DETECT=");
-  Serial.println(TRIGGER_ON_DETECT ? "true" : "false");
-
-  Serial.print("obstacleDetected=");
-  Serial.println(irObstacleDetectedRaw() ? "true" : "false");
-
-  Serial.print("lastCleanAgo(ms)=");
+  Serial.print("State=");
+  Serial.print(stateName(state));
+  Serial.print(" | IR_ACTIVE_LOW=");
+  Serial.print(IR_ACTIVE_LOW ? "true" : "false");
+  Serial.print(" | TRIGGER_ON_DETECT=");
+  Serial.print(TRIGGER_ON_DETECT ? "true" : "false");
+  Serial.print(" | obstacleDetected=");
+  Serial.print(irObstacleDetectedRaw() ? "true" : "false");
+  Serial.print(" | lastCleanAgo(ms)=");
   Serial.println((unsigned long)(millis() - t_last_clean));
-
-  Serial.print("UltrasonicDistance(cm)=");
-  Serial.println(g_lastDistanceCm);
-
-  Serial.print("WasteLevelStatus=");
-  Serial.println(levelNameFromDistance(g_lastDistanceCm));
-
-  Serial.println("-------------------------------------------");
 }
 
 static void handleSerial() {
@@ -424,114 +355,26 @@ static void handleSerial() {
       IR_ACTIVE_LOW = !IR_ACTIVE_LOW;
       Serial.print("IR_ACTIVE_LOW toggled -> ");
       Serial.println(IR_ACTIVE_LOW ? "true (active LOW)" : "false (active HIGH)");
-    } else if (c == 'u') {
-      updateUltrasonicMonitor(true);
     }
   }
 }
 
-// ============================================================
-// -------------------- ULTRASONIC FUNCTIONS -------------------
-// ============================================================
-
-static float readDistanceSingle() {
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-
-  unsigned long duration = pulseIn(echoPin, HIGH, ULTRA_TIMEOUT_US);
-
-  if (duration == 0) {
-    return -1.0f;
-  }
-
-  float distance = duration / 58.0f;
-  return distance;
-}
-
-static float readDistanceAveraged(int samples) {
-  float sum = 0.0f;
-  int validCount = 0;
-
-  for (int i = 0; i < samples; i++) {
-    float d = readDistanceSingle();
-    if (d > 0) {
-      sum += d;
-      validCount++;
-    }
-    delay(ULTRA_SAMPLE_GAP_MS);
-  }
-
-  if (validCount == 0) {
-    return -1.0f;
-  }
-
-  return sum / validCount;
-}
-
-static void setTrafficLight(bool redOn, bool yellowOn, bool greenOn) {
-  digitalWrite(redPin, redOn ? HIGH : LOW);
-  digitalWrite(yellowPin, yellowOn ? HIGH : LOW);
-  digitalWrite(greenPin, greenOn ? HIGH : LOW);
-}
-
-static const char* levelNameFromDistance(float distance) {
-  if (distance <= 0) return "INVALID";
-  if (distance <= redThreshold) return "RED - Clean immediately";
-  if (distance <= yellowThreshold) return "YELLOW - Cleaning recommended";
-  return "GREEN - No cleaning needed";
-}
-
-static void updateTrafficLightFromDistance(float distance) {
-  if (distance <= 0) {
-    setTrafficLight(false, false, false);
-  } else if (distance <= redThreshold) {
-    setTrafficLight(true, false, false);
-  } else if (distance <= yellowThreshold) {
-    setTrafficLight(false, true, false);
-  } else {
-    setTrafficLight(false, false, true);
-  }
-}
-
-static void updateUltrasonicMonitor(bool forcePrint) {
-  uint32_t now = millis();
-  if (!forcePrint && (now - g_lastUltrasonicUpdateMs) < ULTRA_UPDATE_PERIOD_MS) {
-    return;
-  }
-
-  g_lastUltrasonicUpdateMs = now;
-  g_lastDistanceCm = readDistanceAveraged(ULTRA_NUM_SAMPLES);
-
-  updateTrafficLightFromDistance(g_lastDistanceCm);
-
-  Serial.print("[ULTRA] Distance: ");
-  Serial.print(g_lastDistanceCm);
-  Serial.println(" cm");
-
-  Serial.print("[ULTRA] Status: ");
-  Serial.println(levelNameFromDistance(g_lastDistanceCm));
-}
-
-// ============================================================
-// -------------------- SETUP / LOOP ---------------------------
-// ============================================================
-
+//
+// -------------------- Setup / Loop --------------------
+//
 void setup() {
   Serial.begin(115200);
   delay(200);
 
   Serial.println(' ');
-  Serial.println("[BOOT] Final merged prototype starting...");
-  Serial.println("[BOOT] TT Motor + L9110S + IR + HC-SR04 + Traffic Light");
+  Serial.println("[BOOT] TT Motor + L9110S + IR Obstacle Sensor (Safety Gating Prototype)");
   Serial.println("[BOOT] Use 'h' for help. Monitor baud = 115200.");
 
-  // Original motor subsystem setup
-  pinMode(PIN_STATUS_LED, OUTPUT);
-  digitalWrite(PIN_STATUS_LED, LOW);
+  Serial.println("Boot OK - Cat Litterbox Motor Prototype (IR + L9110S)");
+  Serial.println("Power note: Driver VCC should be VBUS (USB 5V). 3.3V may not spin TT motor.");
+
+  pinMode(PIN_LED, OUTPUT);
+  digitalWrite(PIN_LED, LOW);
 
   pinMode(PIN_IR_OUT, INPUT);
   pinMode(PIN_IN1, OUTPUT);
@@ -545,31 +388,18 @@ void setup() {
   motorStopHard();
   t_last_clean = 0;
 
-  // Ultrasonic setup
-  pinMode(echoPin, INPUT);
-  pinMode(trigPin, OUTPUT);
-  digitalWrite(trigPin, LOW);
-
-  pinMode(redPin, OUTPUT);
-  pinMode(yellowPin, OUTPUT);
-  pinMode(greenPin, OUTPUT);
-  setTrafficLight(false, false, false);
-
   setState(SysState::IDLE);
   printHelp();
   printStatus();
-
   logIRChangeIfAny(irObstacleDetectedRaw());
-  updateUltrasonicMonitor(true);
 }
 
 void loop() {
   handleSerial();
   heartbeat();
-  updateUltrasonicMonitor(false);
 
   if (state == SysState::STOPPED_MANUAL) {
-    digitalWrite(PIN_STATUS_LED, LOW);
+    digitalWrite(PIN_LED, LOW);
     motorStopHard();
     delay(10);
     return;
@@ -596,12 +426,12 @@ void loop() {
 
   switch (state) {
     case SysState::IDLE: {
-      digitalWrite(PIN_STATUS_LED, LOW);
+      digitalWrite(PIN_LED, LOW);
       break;
     }
 
     case SysState::CAT_PRESENT: {
-      digitalWrite(PIN_STATUS_LED, HIGH);
+      digitalWrite(PIN_LED, HIGH);
 
       if (!TRIGGER_ON_DETECT && edgeEvent) {
         Serial.println("Cat left -> starting leave-confirm delay");
@@ -611,7 +441,7 @@ void loop() {
     }
 
     case SysState::WAIT_LEAVE_DELAY: {
-      digitalWrite(PIN_STATUS_LED, HIGH);
+      digitalWrite(PIN_LED, HIGH);
 
       if (obstacleNow) {
         Serial.println("Cat returned during delay -> back to CAT_PRESENT");
@@ -633,7 +463,7 @@ void loop() {
     }
 
     case SysState::CLEANING: {
-      digitalWrite(PIN_STATUS_LED, HIGH);
+      digitalWrite(PIN_LED, HIGH);
 
       if (obstacleNow) {
         Serial.println("Safety: obstacle detected during cleaning -> STOP");
@@ -645,11 +475,9 @@ void loop() {
 
       logMotorAction("Cleaning cycle begin");
       motorRampForward(DUTY_MAX);
-
       logMotorAction("Run at DUTY_MAX");
       motorForwardDuty(DUTY_MAX);
       delay(CLEAN_RUN_MS);
-
       motorRampStopFrom(DUTY_MAX);
       delay(POST_STOP_MS);
 
@@ -661,7 +489,7 @@ void loop() {
     }
 
     case SysState::COOLDOWN: {
-      digitalWrite(PIN_STATUS_LED, LOW);
+      digitalWrite(PIN_LED, LOW);
 
       if (t_last_clean != 0 && (now - t_last_clean) >= COOLDOWN_MS) {
         Serial.println("Cooldown finished -> IDLE");
